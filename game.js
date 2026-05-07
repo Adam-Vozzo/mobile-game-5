@@ -94,11 +94,16 @@ const Audio = (() => {
     let muted = localStorage.getItem('mtcd_muted') === '1';
 
     function ensure() {
-        if (actx) return;
+        if (actx) {
+            // iOS may start the context suspended; try to resume after gesture.
+            if (actx.state === 'suspended' && actx.resume) actx.resume();
+            return;
+        }
         actx = new (window.AudioContext || window.webkitAudioContext)();
         masterGain = actx.createGain();
         masterGain.gain.value = muted ? 0 : 0.6;
         masterGain.connect(actx.destination);
+        if (actx.state === 'suspended' && actx.resume) actx.resume();
     }
 
     function setMuted(m) {
@@ -2437,7 +2442,13 @@ if (pauseBtn) {
 function showPauseOverlay() {
     overlayCard.innerHTML = `
         <h1>Paused</h1>
-        <p class="subtitle">Take a breath</p>
+        <p class="subtitle">Take a breath, ranger</p>
+        <div class="shortcuts">
+            <div><kbd>P</kbd> / <kbd>Esc</kbd> pause</div>
+            <div><kbd>M</kbd> mute</div>
+            <div>Hold + circle to capture</div>
+            <div>Release breaks the line</div>
+        </div>
         <button id="resume-btn">Resume</button>
         <button id="restart-btn" class="ghost">Restart Level</button>
         <button id="menu-btn" class="ghost">Back to Menu</button>

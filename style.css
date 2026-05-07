@@ -296,6 +296,29 @@ html, body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+#overlay-card .shortcuts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+    margin: 8px auto 14px;
+    max-width: 360px;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: left;
+}
+
+#overlay-card .shortcuts kbd {
+    display: inline-block;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-family: ui-monospace, "SF Mono", monospace;
+    color: var(--text);
+    margin-right: 2px;
+}
+
 #overlay-card .streak {
     display: inline-block;
     margin: 6px 0 8px;
