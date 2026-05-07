@@ -40,7 +40,7 @@ const G = {
         x: W / 2, y: H / 2,
         active: false,
         drawing: false,
-        energy: 1,
+        energy: 1,            // 0..1; drains while drawing, regens while not
         radius: 5,
     },
     trail: [],              // active trail (only while drawing)
@@ -713,6 +713,21 @@ const CAT_TYPES = {
         attackChance: 0.006, attackKind: 'phase',
         size: 1.0,
     },
+    russianblue: {
+        id: 'russianblue', name: 'Russian Blue', loops: 3,
+        body: '#6e7e8a', dark: '#4a5260', belly: '#b8c4d0', stripes: false,
+        speedBase: 130, speedLevel: 25, interest: 360,
+        attackChance: 0.005, attackKind: 'swipe',
+        size: 0.95, eyeColor: '#4dffb6',
+    },
+    ragdoll: {
+        id: 'ragdoll', name: 'Ragdoll', loops: 3,
+        body: '#f5e0c0', dark: '#6a4830', belly: '#fff8eb', stripes: false,
+        siamese: true, fluffy: true,
+        speedBase: 80, speedLevel: 18, interest: 280,
+        attackChance: 0.003, attackKind: 'pounce',
+        size: 1.05, eyeColor: '#7cd6ff',
+    },
     bengal: {
         id: 'bengal', name: 'Bengal', loops: 3,
         body: '#e8a437', dark: '#3d2a18', belly: '#fff0c2', stripes: false, spots: true,
@@ -870,7 +885,17 @@ function updateCat(cat, dt) {
 
 function beginAttack(cat, dx, dy, d) {
     const kind = cat.type.attackKind;
-    cat.attackCooldown = rand(2.5, 5.5) - G.level * 0.1;
+    // Boss phases: as the boss takes more loops, attacks become much more frequent
+    let cooldown = rand(2.5, 5.5) - G.level * 0.1;
+    if (cat.type.isBoss) {
+        const ratio = cat.captureProgress / cat.type.loops;
+        // Phase 1 (0-50%): normal pace
+        // Phase 2 (50-80%): 1.4× faster
+        // Phase 3 (80-100%): 2× faster + furious
+        if (ratio > 0.8) cooldown *= 0.5;
+        else if (ratio > 0.5) cooldown *= 0.72;
+    }
+    cat.attackCooldown = cooldown;
     if (kind === 'swipe') {
         cat.attackState = { kind, t: 0, dur: 0.6, dx, dy, telegraphTime: 0.35 };
     } else if (kind === 'pounce') {
@@ -1420,6 +1445,12 @@ function roundedRect(x, y, w, h, r) {
 
 // ---------- Laser / trail / loop detection ----------
 function startDrawing(x, y) {
+    // Block if energy is too low — give brief feedback so player knows
+    if (G.laser.energy < 0.15) {
+        FX.floatText(x, y - 16, 'RECHARGING…', '#ff8a44', 14);
+        FX.spawnSparkles(x, y, 6, '#ff8a44');
+        return;
+    }
     G.laser.drawing = true;
     G.laser.active = true;
     G.laser.x = x; G.laser.y = y;
@@ -1540,6 +1571,7 @@ function detectLoop() {
 }
 
 function registerLoop(cat, poly, area) {
+    const prevProgress = cat.captureProgress;
     cat.captureProgress += 1;
     const signed = polygonSigned(poly);
     const dir = signed > 0 ? -1 : 1;
@@ -1547,6 +1579,28 @@ function registerLoop(cat, poly, area) {
     cat.mood = 'dizzy';
     cat.moodTimer = 1.2;
     cat.captureFlash = 1;
+
+    // Boss phase transition celebration
+    if (cat.type.isBoss && cat.captureProgress < cat.type.loops) {
+        const prevRatio = prevProgress / cat.type.loops;
+        const newRatio = cat.captureProgress / cat.type.loops;
+        if (prevRatio < 0.5 && newRatio >= 0.5) {
+            FX.floatText(cat.x, cat.y - cat.size - 60, 'BOSS ENRAGED!', '#ff3b6e', 28);
+            FX.shake(12, 0.4);
+            FX.shockwave(cat.x, cat.y, 'rgba(255,60,90,0.8)', cat.size * 4, 0.6);
+            FX.flash('255,60,90', 0.3);
+            if (audioUnlocked) Audio.SFX.attack();
+            // Trigger an immediate roar
+            cat.attackCooldown = 0.4;
+        } else if (prevRatio < 0.8 && newRatio >= 0.8) {
+            FX.floatText(cat.x, cat.y - cat.size - 60, 'FINAL PHASE!', '#ffd84d', 30);
+            FX.shake(18, 0.55);
+            FX.shockwave(cat.x, cat.y, 'rgba(255,200,80,0.9)', cat.size * 5, 0.7);
+            FX.flash('255,200,80', 0.4);
+            if (audioUnlocked) { Audio.SFX.attack(); Audio.SFX.hiss(); }
+            cat.attackCooldown = 0.3;
+        }
+    }
 
     // Combo
     G.combo += 1;
@@ -1638,7 +1692,7 @@ function levelSpec(n) {
     if (n === 11) return ['bengal', 'bengal', 'tuxedo', 'siamese'];
     if (n === 12) return ['black', 'sphynx', 'persian', 'siamese', 'kitten'];
     // Beyond: scale up
-    const types = ['ginger', 'black', 'white', 'calico', 'kitten', 'persian', 'sphynx', 'bengal', 'tuxedo', 'siamese'];
+    const types = ['ginger', 'black', 'white', 'calico', 'kitten', 'persian', 'sphynx', 'bengal', 'tuxedo', 'siamese', 'russianblue', 'ragdoll'];
     const out = [];
     const count = Math.min(7, 4 + ((n - 13) / 2 | 0));
     for (let i = 0; i < count; i++) out.push(choice(types));
@@ -1678,6 +1732,7 @@ function startLevel(n) {
     G.levelIntroT = 2.4;
     G.idleT = 0;
     G.levelCaptures = [];
+    G.laser.energy = 1;
     hideOverlay();
     if (audioUnlocked) Audio.SFX.click();
     fireHook('onLevelStart', n);
@@ -1913,6 +1968,28 @@ function drawLaser() {
     ctx.arc(laser.x, laser.y, 40, 0, TAU);
     ctx.fill();
 
+    // Energy ring around the laser (always visible during play; drained while drawing)
+    if (G.stage === 'playing') {
+        const energy = G.laser.energy;
+        const r = 26;
+        // Background track
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, r, 0, TAU);
+        ctx.stroke();
+        // Energy fill
+        const sweep = TAU * energy;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = energy < 0.25 ? '#ff5566' : (energy < 0.5 ? '#ffb84d' : '#7cd6ff');
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, r, -Math.PI / 2, -Math.PI / 2 + sweep);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
     // Combo timer ring around the laser
     if (G.combo > 0 && G.comboTimer > 0) {
         const t01 = clamp(G.comboTimer / 2.5, 0, 1);
@@ -2135,6 +2212,14 @@ function frame(now) {
         if (G.levelIntroT > 0) G.levelIntroT = Math.max(0, G.levelIntroT - eff);
         if (G.stage === 'playing' && !G.laser.drawing && G.levelIntroT <= 0) G.idleT += eff;
         else G.idleT = 0;
+        // Laser energy: drains while drawing, regens otherwise.
+        // Drain at ~0.18/s while drawing, regen at ~0.45/s while idle.
+        if (G.laser.drawing) {
+            G.laser.energy = Math.max(0, G.laser.energy - 0.18 * eff);
+            if (G.laser.energy <= 0) breakTrail('energy');
+        } else {
+            G.laser.energy = Math.min(1, G.laser.energy + 0.45 * eff);
+        }
         fireHook('onUpdate', eff);
         // Shake
         if (G.shakeT > 0) {
@@ -2257,8 +2342,8 @@ function drawLevelIntro() {
 
 // ---------- Boot ----------
 // Wandering cats behind the menu — gives the screen life on first load
-const menuTypes = ['ginger', 'tuxedo', 'siamese', 'bengal', 'kitten', 'calico'];
-for (let i = 0; i < 6; i++) {
+const menuTypes = ['ginger', 'tuxedo', 'siamese', 'bengal', 'kitten', 'calico', 'russianblue', 'ragdoll'];
+for (let i = 0; i < 7; i++) {
     G.cats.push(createCat(menuTypes[i % menuTypes.length], rand(80, W - 80), rand(H * 0.4, H - 80)));
 }
 showMenuOverlay();

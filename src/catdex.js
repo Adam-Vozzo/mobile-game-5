@@ -24,14 +24,19 @@
     // Mirrors game.js CAT_TYPES so we can list everything (even un-caught)
     // without poking the game module's internals.
     const CAT_TYPES = [
-        { id: 'ginger',  name: 'Tabby',      loops: 2, body: '#f6a83d', dark: '#d8852a', isBoss: false },
-        { id: 'black',   name: 'Shadow Cat', loops: 3, body: '#2a223a', dark: '#15101f', isBoss: false, eyeColor: '#ffd84d' },
-        { id: 'white',   name: 'Snowpaw',    loops: 2, body: '#f5efff', dark: '#cdc4dd', isBoss: false, eyeColor: '#7cd6ff' },
-        { id: 'calico',  name: 'Patches',    loops: 2, body: '#f6a83d', dark: '#1a1418', isBoss: false, patches: true },
-        { id: 'kitten',  name: 'Kitten',     loops: 1, body: '#a07b50', dark: '#7b5c34', isBoss: false, kitten: true },
-        { id: 'persian', name: 'Persian',    loops: 4, body: '#e6d8ba', dark: '#b8a883', isBoss: false, fluffy: true,  eyeColor: '#ff8aa9' },
-        { id: 'sphynx',  name: 'Sphynx',     loops: 3, body: '#e8b89a', dark: '#b88770', isBoss: false, wrinkled: true },
-        { id: 'maine',   name: 'Maine Boss', loops: 6, body: '#3d2a18', dark: '#22150a', isBoss: true,  fluffy: true },
+        { id: 'ginger',      name: 'Tabby',       loops: 2, body: '#f6a83d', dark: '#d8852a', isBoss: false },
+        { id: 'black',       name: 'Shadow Cat',  loops: 3, body: '#2a223a', dark: '#15101f', isBoss: false, eyeColor: '#ffd84d' },
+        { id: 'white',       name: 'Snowpaw',     loops: 2, body: '#f5efff', dark: '#cdc4dd', isBoss: false, eyeColor: '#7cd6ff' },
+        { id: 'calico',      name: 'Patches',     loops: 2, body: '#f6a83d', dark: '#1a1418', isBoss: false, patches: true },
+        { id: 'kitten',      name: 'Kitten',      loops: 1, body: '#a07b50', dark: '#7b5c34', isBoss: false, kitten: true },
+        { id: 'persian',     name: 'Persian',     loops: 4, body: '#e6d8ba', dark: '#b8a883', isBoss: false, fluffy: true,  eyeColor: '#ff8aa9' },
+        { id: 'sphynx',      name: 'Sphynx',      loops: 3, body: '#e8b89a', dark: '#b88770', isBoss: false, wrinkled: true },
+        { id: 'bengal',      name: 'Bengal',      loops: 3, body: '#e8a437', dark: '#3d2a18', isBoss: false, eyeColor: '#4dffb6' },
+        { id: 'tuxedo',      name: 'Tuxedo',      loops: 2, body: '#1a1418', dark: '#0a0508', isBoss: false },
+        { id: 'siamese',     name: 'Siamese',     loops: 4, body: '#e8d4ba', dark: '#5a4030', isBoss: false, eyeColor: '#7cd6ff' },
+        { id: 'russianblue', name: 'Russian Blue',loops: 3, body: '#6e7e8a', dark: '#4a5260', isBoss: false, eyeColor: '#4dffb6' },
+        { id: 'ragdoll',     name: 'Ragdoll',     loops: 3, body: '#f5e0c0', dark: '#6a4830', isBoss: false, fluffy: true, eyeColor: '#7cd6ff' },
+        { id: 'maine',       name: 'Maine Boss',  loops: 6, body: '#3d2a18', dark: '#22150a', isBoss: true,  fluffy: true },
     ];
     // Lookup by id (used to merge new/unknown types we see at capture time).
     const knownIds = new Set(CAT_TYPES.map((t) => t.id));
