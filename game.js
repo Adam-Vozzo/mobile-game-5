@@ -488,7 +488,62 @@ function drawButterfly(c, x, y, t) {
     c.restore();
 }
 
-const SCENE_ORDER = ['livingRoom', 'garden', 'kitchen', 'bedroom', 'attic', 'arena'];
+// ---------- Cat Café scene (warm browns, coffee mugs, hanging lights) ----------
+SCENES.catCafe = {
+    name: 'Cat Café', accent: '#ffb84d',
+    draw(c, time) {
+        // Warm wood floor wash
+        const floor = c.createLinearGradient(0, H * 0.6, 0, H);
+        floor.addColorStop(0, 'rgba(86, 54, 32, 0.0)');
+        floor.addColorStop(1, 'rgba(86, 54, 32, 0.5)');
+        c.fillStyle = floor;
+        c.fillRect(0, H * 0.6, W, H * 0.4);
+        // Counter line
+        c.fillStyle = 'rgba(60, 38, 22, 0.55)';
+        roundedRectFill(c, W * 0.0, H * 0.78, W, 14, 0);
+        // Coffee mugs scattered along the counter
+        for (let i = 0; i < 5; i++) {
+            const x = W * (0.1 + i * 0.18) + Math.sin(time * 0.6 + i) * 4;
+            const y = H * 0.78 - 16;
+            c.fillStyle = 'rgba(220, 200, 170, 0.7)';
+            roundedRectFill(c, x - 12, y - 18, 22, 22, 4);
+            // Steam
+            c.strokeStyle = `rgba(255, 240, 220, ${0.18 + 0.1 * Math.sin(time * 2 + i)})`;
+            c.lineWidth = 2;
+            c.beginPath();
+            for (let k = 0; k < 3; k++) {
+                const sx = x - 4 + Math.sin(time * 2 + i + k) * 3;
+                const sy = y - 22 - k * 10;
+                if (k === 0) c.moveTo(sx, sy + 5);
+                c.quadraticCurveTo(sx + 4, sy, sx, sy - 5);
+            }
+            c.stroke();
+        }
+        // Hanging warm pendant lights
+        for (let i = 0; i < 3; i++) {
+            const lx = W * (0.25 + i * 0.25);
+            const ly = H * 0.18 + Math.sin(time * 1 + i) * 3;
+            c.strokeStyle = 'rgba(160, 110, 70, 0.45)';
+            c.lineWidth = 1.5;
+            c.beginPath();
+            c.moveTo(lx, 0); c.lineTo(lx, ly);
+            c.stroke();
+            const grd = c.createRadialGradient(lx, ly, 4, lx, ly, 120);
+            grd.addColorStop(0, 'rgba(255, 200, 120, 0.45)');
+            grd.addColorStop(1, 'rgba(255, 200, 120, 0)');
+            c.fillStyle = grd;
+            c.beginPath();
+            c.arc(lx, ly, 80, 0, TAU);
+            c.fill();
+            c.fillStyle = '#ffd97a';
+            c.beginPath();
+            c.arc(lx, ly, 4, 0, TAU);
+            c.fill();
+        }
+    },
+};
+
+const SCENE_ORDER = ['livingRoom', 'garden', 'kitchen', 'bedroom', 'attic', 'catCafe', 'arena'];
 G.scene = 'livingRoom';
 
 // ---------- Power-ups ----------
@@ -789,6 +844,13 @@ function updateCat(cat, dt) {
         cat.rotation += 4 * dt;
         cat.size *= Math.pow(0.4, dt);
         cat.captureFlash = Math.max(0, cat.captureFlash - dt * 2);
+        return;
+    }
+
+    // During boss intro, the boss stays put for dramatic effect
+    if (G.bossIntro && G.levelIntroT > 1.0 && cat.type.isBoss) {
+        cat.tailPhase += dt * 2;
+        cat.walkPhase += dt * 1.5;
         return;
     }
 
@@ -1763,10 +1825,17 @@ function startLevel(n) {
         G.scene = SCENE_ORDER[(n - 1) % (SCENE_ORDER.length - 1)];
     }
     G.stage = 'playing';
-    G.levelIntroT = 2.4;
+    const bossWave = G.cats.some(c => c.type.isBoss);
+    G.levelIntroT = bossWave ? 3.6 : 2.4;
+    G.bossIntro = bossWave;
     G.idleT = 0;
     G.levelCaptures = [];
     G.laser.energy = 1;
+    if (bossWave) {
+        FX.shake(8, 0.5);
+        FX.flash('255,60,90', 0.3);
+        if (audioUnlocked) Audio.SFX.attack();
+    }
     hideOverlay();
     if (audioUnlocked) Audio.SFX.click();
     fireHook('onLevelStart', n);
@@ -2388,16 +2457,50 @@ function drawIdleHint() {
 function drawLevelIntro() {
     if (G.levelIntroT <= 0) return;
     const tt = G.levelIntroT;
-    // Phases: appear, hold, fade
+    const total = G.bossIntro ? 3.6 : 2.4;
+    const fadeIn = G.bossIntro ? 0.5 : 0.4;
+    const fadeOut = G.bossIntro ? 0.7 : 0.6;
     let alpha = 1;
-    if (tt > 2.0) alpha = (2.4 - tt) / 0.4;       // fade in 0.4s
-    else if (tt < 0.6) alpha = tt / 0.6;          // fade out 0.6s
+    if (tt > total - fadeIn) alpha = (total - tt) / fadeIn;
+    else if (tt < fadeOut) alpha = tt / fadeOut;
     alpha = clamp(alpha, 0, 1);
 
     const scene = SCENES[G.scene];
     const sceneName = scene ? scene.name : '';
     const remaining = G.cats.filter(c => !c.captured).length;
-    const isBoss = G.cats.some(c => c.type.isBoss);
+    const boss = G.cats.find(c => c.type.isBoss);
+
+    if (G.bossIntro && boss) {
+        // Dramatic vignette
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const grd = ctx.createRadialGradient(boss.x, boss.y, boss.size * 1.2, W / 2, H / 2, Math.max(W, H) * 0.7);
+        grd.addColorStop(0, 'rgba(0,0,0,0)');
+        grd.addColorStop(1, 'rgba(0,0,0,0.65)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+        // Red sweep bands
+        ctx.fillStyle = `rgba(255, 60, 90, ${0.18 * alpha})`;
+        ctx.fillRect(0, H * 0.34, W, 60);
+        ctx.fillRect(0, H * 0.54, W, 4);
+        ctx.fillRect(0, H * 0.34 - 4, W, 4);
+        // Title
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        const wobble = Math.sin(performance.now() * 0.012) * 4;
+        ctx.font = 'bold 22px system-ui, sans-serif';
+        ctx.fillStyle = '#ff3b6e';
+        ctx.fillText('⚠ BOSS WAVE ⚠', W / 2 + wobble, H * 0.38);
+        ctx.font = 'bold 52px system-ui, sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(boss.type.name.toUpperCase(), W / 2, H * 0.48);
+        ctx.font = 'bold 16px system-ui, sans-serif';
+        ctx.fillStyle = '#ff8aa9';
+        ctx.fillText(`${boss.type.loops} LOOPS REQUIRED`, W / 2, H * 0.54);
+        ctx.restore();
+        return;
+    }
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -2405,17 +2508,14 @@ function drawLevelIntro() {
     ctx.shadowBlur = 12;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
 
-    // "LEVEL N"
     ctx.font = 'bold 18px system-ui, sans-serif';
     ctx.fillStyle = (scene && scene.accent) || '#ffd84d';
-    ctx.fillText(isBoss ? '⚠ BOSS WAVE ⚠' : `LEVEL ${G.level}`, W / 2, H * 0.32);
+    ctx.fillText(`LEVEL ${G.level}`, W / 2, H * 0.32);
 
-    // Scene name
     ctx.font = 'bold 44px system-ui, sans-serif';
     ctx.fillStyle = '#fff';
     ctx.fillText(sceneName, W / 2, H * 0.40);
 
-    // Cat count
     ctx.font = '16px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText(remaining === 1 ? 'Catch the cat!' : `Catch ${remaining} cats!`, W / 2, H * 0.45);
