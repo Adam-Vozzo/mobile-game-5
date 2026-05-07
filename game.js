@@ -26,6 +26,7 @@ resize();
 // ---------- Global state ----------
 const G = {
     stage: 'menu',          // 'menu' | 'playing' | 'levelComplete' | 'gameOver'
+    paused: false,
     time: 0,
     levelTime: 0,
     level: 1,
@@ -56,6 +57,7 @@ const G = {
     slowmo: 1,
     bg: { stars: [], dust: [] },
     flow: 0,                // smoothed combo intensity for visual juice
+    levelIntroT: 0,         // countdown for the "Level N: Scene" intro splash
 };
 window.G = G; // expose for tinkering
 
@@ -944,6 +946,19 @@ function drawCat(cat) {
     ctx.globalAlpha = cat.phaseAlpha;
     ctx.translate(cat.x, cat.y);
 
+    // Last-cat highlight — pulsing aura around the final remaining cat
+    if (G.stage === 'playing' && G.capturesLeft === 1 && !cat.captured) {
+        const pulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.006);
+        const r = cat.size * 1.6;
+        const grd = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
+        grd.addColorStop(0, `rgba(255, 220, 80, ${0.3 * pulse})`);
+        grd.addColorStop(1, 'rgba(255, 220, 80, 0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.fill();
+    }
+
     // Capture flash halo
     if (cat.captureFlash > 0) {
         const r = cat.size * (1.2 + (1 - cat.captureFlash) * 0.5);
@@ -1242,13 +1257,11 @@ function drawCatHUD(cat) {
         ctx.stroke();
         ctx.shadowBlur = 0;
     }
-    // Boss tag
-    if (t.isBoss) {
-        ctx.fillStyle = '#ff3b6e';
-        ctx.font = 'bold 11px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('BOSS', cx, cy - r - 4);
-    }
+    // Cat name label (faded so it doesn't dominate)
+    ctx.fillStyle = t.isBoss ? '#ff3b6e' : 'rgba(255,255,255,0.7)';
+    ctx.font = `${t.isBoss ? 'bold ' : ''}11px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(t.isBoss ? `BOSS · ${t.name.toUpperCase()}` : t.name, cx, cy - r - 4);
     ctx.restore();
 }
 
@@ -1457,6 +1470,15 @@ function registerLoop(cat, poly, area) {
     FX.shockwave(cat.x, cat.y, 'rgba(255,200,80,0.8)', cat.size * 2.5, 0.5);
     FX.floatText(cat.x, cat.y - cat.size - 30, `+${points}${G.combo > 1 ? ` ×${G.combo}` : ''}`, '#ffd84d', 18);
     FX.shake(3, 0.18);
+
+    // Combo milestone celebration
+    if ([3, 5, 7, 10, 15, 20].includes(G.combo)) {
+        const labels = { 3: 'NICE!', 5: 'FRENZY!', 7: 'WILD!', 10: 'BLAZING!', 15: 'LEGENDARY!', 20: 'GODLIKE!' };
+        FX.floatText(W / 2, H * 0.3, labels[G.combo], '#ffec5e', 36);
+        FX.flash('255,236,180', 0.25);
+        FX.shake(6, 0.25);
+        FX.spawnConfetti(W / 2, H * 0.3, 30, { color: '#ffd84d', spread: 320, lifeMin: 0.8, lifeMax: 1.4 });
+    }
     fireHook('onLoopComplete', cat, area, points);
 
     if (cat.captureProgress >= cat.type.loops) {
@@ -1554,6 +1576,7 @@ function startLevel(n) {
         G.scene = SCENE_ORDER[(n - 1) % (SCENE_ORDER.length - 1)];
     }
     G.stage = 'playing';
+    G.levelIntroT = 2.4;
     hideOverlay();
     if (audioUnlocked) Audio.SFX.click();
     fireHook('onLevelStart', n);
@@ -1724,7 +1747,21 @@ function drawSinglePolyline(pts, alpha, broken) {
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const color = broken ? '255,80,80' : '255,50,70';
+    // Combo-reactive coloring — line shifts from red → orange → gold as combo grows
+    const flow = G.flow || 0;
+    let glowColor, coreColor, glowShadow;
+    if (broken) {
+        glowColor = `rgba(255,80,80,${0.22 * alpha})`;
+        coreColor = `rgba(255,180,180,${0.85 * alpha})`;
+        glowShadow = '#ff4444';
+    } else {
+        const r = lerp(255, 255, flow);
+        const g = lerp(50, 200, flow);
+        const b = lerp(70, 80, flow);
+        glowColor = `rgba(${r|0},${g|0},${b|0},${(0.18 + flow * 0.18) * alpha})`;
+        coreColor = `rgba(255,${(200 + flow * 40)|0},${(210 - flow * 80)|0},${0.9 * alpha})`;
+        glowShadow = flow > 0.5 ? '#ffd84d' : '#ff2244';
+    }
     // Wide outer glow
     ctx.beginPath();
     for (let i = 0; i < pts.length; i++) {
@@ -1732,10 +1769,10 @@ function drawSinglePolyline(pts, alpha, broken) {
         if (i === 0) ctx.moveTo(p.x, p.y);
         else ctx.lineTo(p.x, p.y);
     }
-    ctx.strokeStyle = `rgba(${color},${0.18 * alpha})`;
-    ctx.lineWidth = 22;
-    ctx.shadowBlur = 30;
-    ctx.shadowColor = broken ? '#ff4444' : '#ff2244';
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 22 + flow * 8;
+    ctx.shadowBlur = 30 + flow * 20;
+    ctx.shadowColor = glowShadow;
     ctx.stroke();
     // Inner core
     ctx.shadowBlur = 0;
@@ -1745,8 +1782,8 @@ function drawSinglePolyline(pts, alpha, broken) {
         if (i === 0) ctx.moveTo(p.x, p.y);
         else ctx.lineTo(p.x, p.y);
     }
-    ctx.strokeStyle = broken ? `rgba(255,180,180,${0.85 * alpha})` : `rgba(255,200,210,${0.85 * alpha})`;
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = coreColor;
+    ctx.lineWidth = 3 + flow * 2;
     ctx.stroke();
     ctx.restore();
 }
@@ -1898,8 +1935,41 @@ canvas.addEventListener('touchcancel', pointerEnd, { passive: false });
 window.addEventListener('keydown', (e) => {
     if (e.key === 'm' || e.key === 'M') {
         Audio.setMuted(!Audio.isMuted());
+    } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        if (G.stage === 'playing') togglePause();
     }
 });
+
+function togglePause() {
+    G.paused = !G.paused;
+    if (G.paused) showPauseOverlay();
+    else hideOverlay();
+}
+
+function showPauseOverlay() {
+    overlayCard.innerHTML = `
+        <h1>Paused</h1>
+        <p class="subtitle">Take a breath</p>
+        <button id="resume-btn">Resume</button>
+        <button id="restart-btn" class="ghost">Restart Level</button>
+        <button id="menu-btn" class="ghost">Back to Menu</button>
+    `;
+    overlay.classList.add('show');
+    document.getElementById('resume-btn').addEventListener('click', () => togglePause());
+    document.getElementById('restart-btn').addEventListener('click', () => {
+        G.paused = false;
+        startLevel(G.level);
+    });
+    document.getElementById('menu-btn').addEventListener('click', () => {
+        G.paused = false;
+        G.stage = 'menu';
+        G.cats = [];
+        for (let i = 0; i < 5; i++) {
+            G.cats.push(createCat(menuTypes[i], rand(80, W - 80), rand(H * 0.4, H - 80)));
+        }
+        showMenuOverlay();
+    });
+}
 
 // ---------- Main loop ----------
 let lastT = performance.now();
@@ -1908,7 +1978,9 @@ function frame(now) {
     if (dt > 0.1) dt = 0.1;
     lastT = now;
 
-    if (G.hitstop > 0) {
+    if (G.paused) {
+        // Render only — no updates
+    } else if (G.hitstop > 0) {
         G.hitstop -= dt;
     } else {
         const eff = dt * G.slowmo;
@@ -1924,6 +1996,7 @@ function frame(now) {
         for (const cat of G.cats) updateCat(cat, eff);
         updateParticles(eff);
         updateDust(eff);
+        if (G.levelIntroT > 0) G.levelIntroT = Math.max(0, G.levelIntroT - eff);
         fireHook('onUpdate', eff);
         // Shake
         if (G.shakeT > 0) {
@@ -1964,13 +2037,57 @@ function frame(now) {
         ctx.fillRect(0, 0, W, H);
     }
 
+    drawLevelIntro();
+
     updateHud();
 
     requestAnimationFrame(frame);
 }
 
+function drawLevelIntro() {
+    if (G.levelIntroT <= 0) return;
+    const tt = G.levelIntroT;
+    // Phases: appear, hold, fade
+    let alpha = 1;
+    if (tt > 2.0) alpha = (2.4 - tt) / 0.4;       // fade in 0.4s
+    else if (tt < 0.6) alpha = tt / 0.6;          // fade out 0.6s
+    alpha = clamp(alpha, 0, 1);
+
+    const scene = SCENES[G.scene];
+    const sceneName = scene ? scene.name : '';
+    const remaining = G.cats.filter(c => !c.captured).length;
+    const isBoss = G.cats.some(c => c.type.isBoss);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+
+    // "LEVEL N"
+    ctx.font = 'bold 18px system-ui, sans-serif';
+    ctx.fillStyle = (scene && scene.accent) || '#ffd84d';
+    ctx.fillText(isBoss ? '⚠ BOSS WAVE ⚠' : `LEVEL ${G.level}`, W / 2, H * 0.32);
+
+    // Scene name
+    ctx.font = 'bold 44px system-ui, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(sceneName, W / 2, H * 0.40);
+
+    // Cat count
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText(remaining === 1 ? 'Catch the cat!' : `Catch ${remaining} cats!`, W / 2, H * 0.45);
+
+    ctx.restore();
+}
+
 // ---------- Boot ----------
-G.cats = [createCat('ginger', W / 2, H / 2 + 60)]; // idle preview cat behind menu
+// Wandering cats behind the menu — gives the screen life on first load
+const menuTypes = ['ginger', 'black', 'white', 'calico', 'kitten'];
+for (let i = 0; i < 5; i++) {
+    G.cats.push(createCat(menuTypes[i], rand(80, W - 80), rand(H * 0.4, H - 80)));
+}
 showMenuOverlay();
 requestAnimationFrame(frame);
 
