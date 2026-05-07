@@ -711,6 +711,27 @@ const CAT_TYPES = {
         attackChance: 0.006, attackKind: 'phase',
         size: 1.0,
     },
+    bengal: {
+        id: 'bengal', name: 'Bengal', loops: 3,
+        body: '#e8a437', dark: '#3d2a18', belly: '#fff0c2', stripes: false, spots: true,
+        speedBase: 155, speedLevel: 28, interest: 440,
+        attackChance: 0.009, attackKind: 'dart',
+        size: 1.05, eyeColor: '#4dffb6',
+    },
+    tuxedo: {
+        id: 'tuxedo', name: 'Tuxedo', loops: 2,
+        body: '#1a1418', dark: '#0a0508', belly: '#ffffff', stripes: false, tuxedo: true,
+        speedBase: 110, speedLevel: 25, interest: 360,
+        attackChance: 0.005, attackKind: 'pounce',
+        size: 1.0,
+    },
+    siamese: {
+        id: 'siamese', name: 'Siamese', loops: 4,
+        body: '#e8d4ba', dark: '#5a4030', belly: '#fff0e0', stripes: false, siamese: true,
+        speedBase: 90, speedLevel: 22, interest: 380,
+        attackChance: 0.004, attackKind: 'swipe',
+        size: 1.05, eyeColor: '#7cd6ff',
+    },
 };
 
 // ---------- Cat entity ----------
@@ -1103,6 +1124,45 @@ function drawCatSprite(cat, wob) {
         }
         ctx.globalAlpha = 1;
     }
+    // Bengal spots / rosettes
+    if (t.spots) {
+        ctx.fillStyle = bodyDark;
+        ctx.globalAlpha = 0.75;
+        const spots = [
+            [-12, 6, 2.4], [-2, 10, 2.0], [8, 6, 2.2], [-16, 0, 1.6],
+            [4, 14, 1.8], [-6, 0, 1.4], [14, 12, 2.0],
+        ];
+        for (const [sx, sy, sr] of spots) {
+            ctx.beginPath();
+            ctx.arc(sx, sy, sr, 0, TAU);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+    // Tuxedo bib (white chest patch)
+    if (t.tuxedo) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(-6, 6);
+        ctx.quadraticCurveTo(0, 22, 8, 6);
+        ctx.quadraticCurveTo(2, 0, -6, 6);
+        ctx.fill();
+        // Bow tie hint
+        ctx.fillStyle = '#1a0f2e';
+        ctx.beginPath();
+        ctx.moveTo(-3, 3); ctx.lineTo(3, 3); ctx.lineTo(0, 7); ctx.closePath();
+        ctx.fill();
+    }
+    // Siamese color points (dark legs/belly fade)
+    if (t.siamese) {
+        ctx.fillStyle = bodyDark;
+        ctx.globalAlpha = 0.55;
+        // Darker patches on legs/back
+        ctx.beginPath();
+        ctx.ellipse(0, 16, 24, 8, 0, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
 
     // Head
     ctx.fillStyle = bodyColor;
@@ -1113,6 +1173,15 @@ function drawCatSprite(cat, wob) {
         ctx.ellipse(18, -6, 18, 16, 0, 0, TAU);
     }
     ctx.fill();
+    // Siamese face mask (darker face / "points")
+    if (t.siamese) {
+        ctx.fillStyle = bodyDark;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.ellipse(20, -2, 12, 9, 0, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
     // Cheeks
     ctx.fillStyle = belly;
     ctx.beginPath();
@@ -1385,15 +1454,37 @@ function endDrawing() {
 
 function breakTrail(reason) {
     if (!G.laser.drawing) return;
+    const oldTrail = G.trail.slice();
     if (G.trail.length > 4) {
-        G.ghostTrails.push({ pts: G.trail.slice(), age: 0, life: 0.5, broken: true });
+        G.ghostTrails.push({ pts: oldTrail, age: 0, life: 0.5, broken: true });
     }
     G.trail = [];
     G.laser.drawing = false;
     G.combo = 0; G.comboTimer = 0;
-    FX.shake(8, 0.3);
+    FX.shake(10, 0.35);
     FX.flash('255,80,80', 0.45);
     FX.spawnSparkles(G.laser.x, G.laser.y, 12, '#ff5566');
+    // Sparks fly off the broken line at sampled points
+    const step = Math.max(1, Math.floor(oldTrail.length / 12));
+    for (let i = 0; i < oldTrail.length; i += step) {
+        const p = oldTrail[i];
+        for (let k = 0; k < 3; k++) {
+            const a = Math.random() * TAU;
+            const sp = 60 + Math.random() * 200;
+            G.particles.push({
+                x: p.x, y: p.y,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp - 80,
+                life: rand(0.4, 0.8),
+                age: 0,
+                color: '#ff5566',
+                size: rand(2, 3.5),
+                gravity: 360,
+                shape: 'square',
+                rot: 0, rotV: rand(-6, 6),
+            });
+        }
+    }
     FX.floatText(G.laser.x, G.laser.y - 16, 'LINE BROKEN!', '#ff5566', 16);
     if (audioUnlocked) Audio.SFX.lineBreak();
     fireHook('onLineBreak', reason);
@@ -1532,18 +1623,22 @@ function levelSpec(n) {
     // Return list of cat types to spawn
     if (n === 1) return ['ginger', 'kitten'];
     if (n === 2) return ['ginger', 'white', 'kitten'];
-    if (n === 3) return ['calico', 'black', 'kitten'];
+    if (n === 3) return ['calico', 'tuxedo', 'kitten'];
     if (n === 4) return ['white', 'sphynx', 'calico'];
-    if (n === 5) return ['black', 'persian', 'kitten', 'kitten'];
-    if (n === 6) return ['sphynx', 'sphynx', 'calico', 'white'];
-    if (n === 7) return ['ginger', 'black', 'persian', 'kitten'];
-    if (n === 8) return ['maine']; // boss
+    if (n === 5) return ['black', 'bengal', 'kitten', 'kitten'];
+    if (n === 6) return ['siamese', 'persian', 'tuxedo'];
+    if (n === 7) return ['sphynx', 'sphynx', 'calico', 'white'];
+    if (n === 8) return ['ginger', 'black', 'bengal', 'kitten'];
+    if (n === 9) return ['siamese', 'persian', 'siamese', 'tuxedo'];
+    if (n === 10) return ['maine']; // first boss
+    if (n === 11) return ['bengal', 'bengal', 'tuxedo', 'siamese'];
+    if (n === 12) return ['black', 'sphynx', 'persian', 'siamese', 'kitten'];
     // Beyond: scale up
-    const types = ['ginger', 'black', 'white', 'calico', 'kitten', 'persian', 'sphynx'];
+    const types = ['ginger', 'black', 'white', 'calico', 'kitten', 'persian', 'sphynx', 'bengal', 'tuxedo', 'siamese'];
     const out = [];
-    const count = Math.min(6, 3 + ((n - 9) / 2 | 0));
+    const count = Math.min(7, 4 + ((n - 13) / 2 | 0));
     for (let i = 0; i < count; i++) out.push(choice(types));
-    if (n % 4 === 0) out.push('maine');
+    if (n % 5 === 0) out.push('maine');
     return out;
 }
 
@@ -2084,9 +2179,9 @@ function drawLevelIntro() {
 
 // ---------- Boot ----------
 // Wandering cats behind the menu — gives the screen life on first load
-const menuTypes = ['ginger', 'black', 'white', 'calico', 'kitten'];
-for (let i = 0; i < 5; i++) {
-    G.cats.push(createCat(menuTypes[i], rand(80, W - 80), rand(H * 0.4, H - 80)));
+const menuTypes = ['ginger', 'tuxedo', 'siamese', 'bengal', 'kitten', 'calico'];
+for (let i = 0; i < 6; i++) {
+    G.cats.push(createCat(menuTypes[i % menuTypes.length], rand(80, W - 80), rand(H * 0.4, H - 80)));
 }
 showMenuOverlay();
 requestAnimationFrame(frame);
