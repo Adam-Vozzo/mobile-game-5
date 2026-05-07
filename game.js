@@ -1554,23 +1554,57 @@ function detectLoop() {
     const minArea = 1500;
     if (area < minArea || len < 120) return;
 
-    let anyHit = false;
+    // Find all cats inside the loop
+    const enclosed = [];
     for (const cat of G.cats) {
         if (cat.captured) continue;
         const minCatArea = cat.size * cat.size * 1.6;
         if (area < minCatArea) continue;
         if (!pointInPolygon(cat.x, cat.y, poly)) continue;
-        registerLoop(cat, poly, area);
-        anyHit = true;
+        enclosed.push(cat);
     }
 
-    if (anyHit) {
-        // Trim trail to leftover so we don't immediately retrigger
-        G.trail = G.trail.slice(-3);
+    if (enclosed.length === 0) return;
+
+    // Loop perfection: how circular is this loop? Compute roundness as
+    // 4πA / P² (1.0 for a perfect circle, ~0.5 for a wobbly one).
+    const roundness = clamp((4 * Math.PI * area) / (len * len), 0, 1);
+    const isPerfect = roundness > 0.78;
+
+    for (const cat of enclosed) registerLoop(cat, poly, area, { multi: enclosed.length, perfect: isPerfect });
+
+    // Multi-cat bonus
+    if (enclosed.length >= 2) {
+        const labels = { 2: 'DOUBLE LOOP!', 3: 'TRIPLE LOOP!', 4: 'QUAD LOOP!', 5: 'PENTA LOOP!' };
+        const lbl = labels[enclosed.length] || `${enclosed.length}× LOOP!`;
+        const bonus = enclosed.length * 250;
+        G.score += bonus;
+        // Use centroid for the float
+        let cx = 0, cy = 0;
+        for (const c of enclosed) { cx += c.x; cy += c.y; }
+        cx /= enclosed.length; cy /= enclosed.length;
+        FX.floatText(cx, cy - 80, `${lbl} +${bonus}`, '#ff8aff', 28);
+        FX.shake(8, 0.3);
+        FX.flash('255,138,255', 0.3);
+        FX.spawnConfetti(cx, cy, 40, { color: '#ff8aff', spread: 320, lifeMin: 0.9, lifeMax: 1.5 });
+        if (audioUnlocked) Audio.SFX.capture();
     }
+    // Loop perfection bonus (single or multi)
+    if (isPerfect) {
+        const bonus = 150;
+        G.score += bonus;
+        let cx = 0, cy = 0;
+        for (const c of enclosed) { cx += c.x; cy += c.y; }
+        cx /= enclosed.length; cy /= enclosed.length;
+        FX.floatText(cx, cy - 60, `PERFECT! +${bonus}`, '#ffd84d', 22);
+        FX.spawnSparkles(cx, cy, 16, '#ffd84d');
+    }
+
+    // Trim trail to leftover so we don't immediately retrigger
+    G.trail = G.trail.slice(-3);
 }
 
-function registerLoop(cat, poly, area) {
+function registerLoop(cat, poly, area, opts = {}) {
     const prevProgress = cat.captureProgress;
     cat.captureProgress += 1;
     const signed = polygonSigned(poly);
@@ -1744,6 +1778,9 @@ function levelComplete() {
         G.bestScore = G.score;
         localStorage.setItem('mtcd_best', G.score.toString());
     }
+    // Persist max level reached (for menu stats)
+    const prevMax = parseInt(localStorage.getItem('mtcd_max_level') || '0', 10);
+    if (G.level > prevMax) localStorage.setItem('mtcd_max_level', G.level.toString());
     if (audioUnlocked) Audio.SFX.levelComplete();
     showLevelCompleteOverlay();
 }
@@ -1758,6 +1795,20 @@ const timeEl = document.getElementById('time');
 const meterLabelEl = document.getElementById('meter-label');
 
 function showMenuOverlay() {
+    // Collect stats for the menu summary
+    let totalCaught = 0;
+    try {
+        const dex = JSON.parse(localStorage.getItem('mtcd_catdex') || '{}');
+        for (const k in dex) totalCaught += dex[k] | 0;
+    } catch {}
+    let achUnlocked = 0;
+    try {
+        const arr = JSON.parse(localStorage.getItem('mtcd_achievements') || '[]');
+        if (Array.isArray(arr)) achUnlocked = arr.length;
+    } catch {}
+    const maxLevel = parseInt(localStorage.getItem('mtcd_max_level') || '0', 10);
+    const hasStats = G.bestScore > 0 || totalCaught > 0 || maxLevel > 0;
+
     overlayCard.innerHTML = `
         <h1>Make the Cat Dizzy!</h1>
         <p class="subtitle">Pokémon Ranger style — but with a cat and a laser pointer</p>
@@ -1767,16 +1818,33 @@ function showMenuOverlay() {
             <li>If you release, get hissed at, or crossed by an attack — your line breaks!</li>
             <li>Bigger loops, faster combos = more points. Catch every cat to win the level.</li>
         </ol>
-        <div class="best-row">${G.bestScore > 0 ? `Best: <strong>${G.bestScore}</strong>` : ''}</div>
-        <button id="start-btn">Start</button>
+        ${hasStats ? `
+        <div class="stat-row">
+            <div><span class="lbl">Best</span><span class="val">${G.bestScore}</span></div>
+            <div><span class="lbl">Top Level</span><span class="val">${maxLevel || 1}</span></div>
+            <div><span class="lbl">Caught</span><span class="val">${totalCaught}</span></div>
+            <div><span class="lbl">Medals</span><span class="val">${achUnlocked}</span></div>
+        </div>` : ''}
+        <button id="start-btn">${maxLevel > 0 ? `Continue · Level ${maxLevel}` : 'Start'}</button>
+        ${maxLevel > 1 ? `<button id="restart-btn" class="ghost">Restart from Level 1</button>` : ''}
         <button id="mute-btn" class="ghost">${Audio.isMuted() ? '🔇 Sound off' : '🔊 Sound on'}</button>
     `;
     overlay.classList.add('show');
     document.getElementById('start-btn').addEventListener('click', () => {
         unlockAudio();
         G.score = 0;
-        startLevel(1);
+        // Continue from highest level reached so the player can keep pushing
+        const startAt = Math.max(1, parseInt(localStorage.getItem('mtcd_max_level') || '0', 10) || 1);
+        startLevel(startAt);
     });
+    const restartBtn = document.getElementById('restart-btn');
+    if (restartBtn) {
+        restartBtn.addEventListener('click', () => {
+            unlockAudio();
+            G.score = 0;
+            startLevel(1);
+        });
+    }
     document.getElementById('mute-btn').addEventListener('click', (e) => {
         Audio.setMuted(!Audio.isMuted());
         e.target.textContent = Audio.isMuted() ? '🔇 Sound off' : '🔊 Sound on';
@@ -1819,6 +1887,8 @@ function showLevelCompleteOverlay() {
 function hideOverlay() { overlay.classList.remove('show'); }
 
 function updateHud() {
+    // Pause button visible only during active play
+    if (pauseBtn) pauseBtn.style.display = (G.stage === 'playing' && !G.paused) ? 'flex' : 'none';
     if (G.stage === 'playing' && G.cats.length) {
         // Aggregate progress over all alive cats
         const remaining = G.cats.filter(c => !c.captured);
@@ -1972,6 +2042,8 @@ function drawLaser() {
     if (G.stage === 'playing') {
         const energy = G.laser.energy;
         const r = 26;
+        // Pulsing alpha at very low energy as a warning
+        const lowAlpha = energy < 0.25 ? 0.6 + 0.4 * Math.sin(performance.now() * 0.02) : 1;
         // Background track
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(255,255,255,0.12)';
@@ -1982,12 +2054,14 @@ function drawLaser() {
         const sweep = TAU * energy;
         ctx.lineWidth = 3;
         ctx.strokeStyle = energy < 0.25 ? '#ff5566' : (energy < 0.5 ? '#ffb84d' : '#7cd6ff');
+        ctx.globalAlpha = lowAlpha;
         ctx.shadowBlur = 6;
         ctx.shadowColor = ctx.strokeStyle;
         ctx.beginPath();
         ctx.arc(laser.x, laser.y, r, -Math.PI / 2, -Math.PI / 2 + sweep);
         ctx.stroke();
         ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
     }
 
     // Combo timer ring around the laser
@@ -2154,9 +2228,18 @@ window.addEventListener('keydown', (e) => {
 });
 
 function togglePause() {
+    if (G.stage !== 'playing') return;
     G.paused = !G.paused;
     if (G.paused) showPauseOverlay();
     else hideOverlay();
+}
+
+const pauseBtn = document.getElementById('pause-btn');
+if (pauseBtn) {
+    pauseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePause();
+    });
 }
 
 function showPauseOverlay() {
