@@ -37,6 +37,8 @@
         { id: 'russianblue', name: 'Russian Blue',loops: 3, body: '#6e7e8a', dark: '#4a5260', isBoss: false, eyeColor: '#4dffb6' },
         { id: 'ragdoll',     name: 'Ragdoll',     loops: 3, body: '#f5e0c0', dark: '#6a4830', isBoss: false, fluffy: true, eyeColor: '#7cd6ff' },
         { id: 'maine',       name: 'Maine Boss',  loops: 6, body: '#3d2a18', dark: '#22150a', isBoss: true,  fluffy: true },
+        { id: 'sphynxBoss',  name: 'Sphynx Phantom', loops: 5, body: '#b07050', dark: '#2a1a14', isBoss: true, wrinkled: true, eyeColor: '#ff3b6e' },
+        { id: 'persianBoss', name: 'Persian Royale', loops: 7, body: '#f4dcb0', dark: '#d4b878', isBoss: true, fluffy: true,    eyeColor: '#ffd84d' },
     ];
     // Lookup by id (used to merge new/unknown types we see at capture time).
     const knownIds = new Set(CAT_TYPES.map((t) => t.id));

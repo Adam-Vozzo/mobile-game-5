@@ -804,6 +804,22 @@ const CAT_TYPES = {
         attackChance: 0.004, attackKind: 'swipe',
         size: 1.05, eyeColor: '#7cd6ff',
     },
+    sphynxBoss: {
+        id: 'sphynxBoss', name: 'Sphynx Phantom', loops: 5,
+        body: '#b07050', dark: '#2a1a14', belly: '#c89380', stripes: false,
+        wrinkled: true, glow: true,
+        speedBase: 130, speedLevel: 24, interest: 520,
+        attackChance: 0.012, attackKind: 'phase',
+        size: 1.4, eyeColor: '#ff3b6e', isBoss: true,
+    },
+    persianBoss: {
+        id: 'persianBoss', name: 'Persian Royale', loops: 7,
+        body: '#f4dcb0', dark: '#d4b878', belly: '#fff5d8', stripes: false,
+        fluffy: true, crown: true,
+        speedBase: 75, speedLevel: 18, interest: 460,
+        attackChance: 0.014, attackKind: 'roar',
+        size: 1.45, eyeColor: '#ffd84d', isBoss: true,
+    },
 };
 
 // ---------- Cat entity ----------
@@ -1056,6 +1072,24 @@ function drawCat(cat) {
     ctx.globalAlpha = cat.phaseAlpha;
     ctx.translate(cat.x, cat.y);
 
+    // Boss aura — slow pulsing crimson halo for any boss
+    if (t.isBoss && !cat.captured) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.003);
+        const r = cat.size * 1.8;
+        const auraColor = (t.eyeColor || '#ff3b6e').replace('#', '');
+        // Convert hex to rgb
+        const hex = auraColor.length === 6 ? auraColor : 'ff3b6e';
+        const rH = parseInt(hex.substr(0, 2), 16);
+        const gH = parseInt(hex.substr(2, 2), 16);
+        const bH = parseInt(hex.substr(4, 2), 16);
+        const grd = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r);
+        grd.addColorStop(0, `rgba(${rH},${gH},${bH}, ${0.18 + 0.08 * pulse})`);
+        grd.addColorStop(1, `rgba(${rH},${gH},${bH}, 0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.fill();
+    }
     // Last-cat highlight — pulsing aura around the final remaining cat
     if (G.stage === 'playing' && G.capturesLeft === 1 && !cat.captured) {
         const pulse = 0.55 + 0.45 * Math.sin(performance.now() * 0.006);
@@ -1298,6 +1332,30 @@ function drawCatSprite(cat, wob) {
     ctx.beginPath();
     ctx.moveTo(24, -19); ctx.lineTo(28, -25); ctx.lineTo(30, -16); ctx.closePath();
     ctx.fill();
+
+    // Crown (Persian Royale boss)
+    if (t.crown) {
+        ctx.fillStyle = '#ffd84d';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#ffec5e';
+        ctx.beginPath();
+        ctx.moveTo(8, -22);
+        ctx.lineTo(11, -32);
+        ctx.lineTo(15, -26);
+        ctx.lineTo(19, -34);
+        ctx.lineTo(23, -26);
+        ctx.lineTo(27, -32);
+        ctx.lineTo(30, -22);
+        ctx.lineTo(8, -22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Gem
+        ctx.fillStyle = '#ff3b6e';
+        ctx.beginPath();
+        ctx.arc(19, -25, 2, 0, TAU);
+        ctx.fill();
+    }
 
     // Eyes
     const eyeColor = t.eyeColor || '#1a0f2e';
@@ -1787,12 +1845,23 @@ function levelSpec(n) {
     if (n === 10) return ['maine']; // first boss
     if (n === 11) return ['bengal', 'bengal', 'tuxedo', 'siamese'];
     if (n === 12) return ['black', 'sphynx', 'persian', 'siamese', 'kitten'];
-    // Beyond: scale up
+    if (n === 13) return ['russianblue', 'ragdoll', 'tuxedo', 'bengal'];
+    if (n === 14) return ['siamese', 'persian', 'ragdoll', 'kitten', 'kitten'];
+    if (n === 15) return ['sphynxBoss']; // second boss
+    if (n === 16) return ['black', 'black', 'bengal', 'tuxedo', 'siamese'];
+    if (n === 17) return ['ragdoll', 'persian', 'russianblue', 'tuxedo'];
+    if (n === 18) return ['bengal', 'siamese', 'sphynx', 'kitten', 'kitten'];
+    if (n === 19) return ['russianblue', 'persian', 'siamese', 'tuxedo', 'ragdoll'];
+    if (n === 20) return ['persianBoss']; // third boss
+    // Beyond: scale up; boss waves rotate every 5 levels
     const types = ['ginger', 'black', 'white', 'calico', 'kitten', 'persian', 'sphynx', 'bengal', 'tuxedo', 'siamese', 'russianblue', 'ragdoll'];
     const out = [];
-    const count = Math.min(7, 4 + ((n - 13) / 2 | 0));
+    const count = Math.min(8, 4 + ((n - 21) / 2 | 0));
     for (let i = 0; i < count; i++) out.push(choice(types));
-    if (n % 5 === 0) out.push('maine');
+    if (n % 5 === 0) {
+        const bosses = ['maine', 'sphynxBoss', 'persianBoss'];
+        out.push(bosses[((n / 5) | 0) % 3]);
+    }
     return out;
 }
 
