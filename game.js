@@ -978,8 +978,11 @@ function updateCat(cat, dt) {
     let ax = 0, ay = 0;
     if (cat.attackState) {
         updateAttack(cat, dt);
-        ax = cat.attackState.ax || 0;
-        ay = cat.attackState.ay || 0;
+        // updateAttack may clear cat.attackState when the attack ends — re-check
+        if (cat.attackState) {
+            ax = cat.attackState.ax || 0;
+            ay = cat.attackState.ay || 0;
+        }
     } else if (cat.moodTimer > 0 && cat.mood === 'dizzy') {
         cat.wobble = Math.min(1, cat.wobble + dt * 4);
         ax = Math.cos(cat.rotation * 2) * 30;
