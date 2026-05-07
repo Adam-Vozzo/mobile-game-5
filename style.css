@@ -185,7 +185,7 @@ html, body {
     margin: 4px 0;
 }
 
-#start-btn {
+#overlay-card button {
     background: linear-gradient(90deg, #ff6e3b, #ff3b6e);
     color: white;
     border: none;
@@ -196,15 +196,84 @@ html, body {
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(255, 59, 110, 0.4);
     transition: transform 0.1s, box-shadow 0.2s;
+    margin: 4px;
 }
 
-#start-btn:hover {
+#overlay-card button:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 28px rgba(255, 59, 110, 0.55);
 }
 
-#start-btn:active {
+#overlay-card button:active {
     transform: translateY(0);
+}
+
+#overlay-card button.ghost {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--text-dim);
+    box-shadow: none;
+    padding: 10px 20px;
+    font-size: 14px;
+}
+
+#overlay-card button.ghost:hover {
+    background: rgba(255,255,255,0.06);
+    transform: none;
+    box-shadow: none;
+}
+
+#overlay-card .best-row {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 6px 0 14px;
+}
+
+#overlay-card .best-row strong {
+    color: var(--text);
+}
+
+#overlay-card .best-tag {
+    display: inline-block;
+    margin-left: 8px;
+    background: linear-gradient(90deg, #ffd84d, #ff6e3b);
+    color: #1a0f2e;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 8px;
+    vertical-align: middle;
+}
+
+#overlay-card .stat-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin: 14px 0 18px;
+}
+
+#overlay-card .stat-row > div {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 70px;
+}
+
+#overlay-card .stat-row .lbl {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#overlay-card .stat-row .val {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
 }
 
 @media (max-width: 480px) {
