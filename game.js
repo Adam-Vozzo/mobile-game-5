@@ -1989,6 +1989,21 @@ const levelEl = document.getElementById('level');
 const timeEl = document.getElementById('time');
 const meterLabelEl = document.getElementById('meter-label');
 
+const MENU_TIPS = [
+    "Bigger loops feel safer. Tighter loops combo faster.",
+    "Hot zones (×2/×3/×5) double down: catch a cat inside one for a bonus.",
+    "Hit M to mute. P or Esc to pause.",
+    "If a boss roars, your line breaks across half the screen — back off.",
+    "Watch for catnip. It softens cats and makes them easier to capture.",
+    "Treats lure cats to a spot. Drop one then circle them all together.",
+    "Combo ×10 enters HYPERDRIVE. The whole screen lights up.",
+    "Loop perfectly round for a +150 PERFECT bonus.",
+    "Two cats in one loop = DOUBLE LOOP, three = TRIPLE. Rare but huge.",
+    "Kittens only need one loop. Persians need four. Bosses need six or more.",
+    "Sphynx Phantoms phase in and out — strike when you can see them.",
+    "Try to clear a level without breaking your line. Flawless streak rewards.",
+];
+
 function showMenuOverlay() {
     // Collect stats for the menu summary
     let totalCaught = 0;
@@ -2003,6 +2018,7 @@ function showMenuOverlay() {
     } catch {}
     const maxLevel = parseInt(localStorage.getItem('mtcd_max_level') || '0', 10);
     const hasStats = G.bestScore > 0 || totalCaught > 0 || maxLevel > 0;
+    const tip = choice(MENU_TIPS);
 
     overlayCard.innerHTML = `
         <h1>Make the Cat Dizzy!</h1>
@@ -2020,6 +2036,7 @@ function showMenuOverlay() {
             <div><span class="lbl">Caught</span><span class="val">${totalCaught}</span></div>
             <div><span class="lbl">Medals</span><span class="val">${achUnlocked}</span></div>
         </div>` : ''}
+        <div class="menu-tip">💡 ${tip}</div>
         <button id="start-btn">${maxLevel > 0 ? `Continue · Level ${maxLevel}` : 'Start'}</button>
         ${maxLevel > 1 ? `<button id="restart-btn" class="ghost">Restart from Level 1</button>` : ''}
         <button id="mute-btn" class="ghost">${Audio.isMuted() ? '🔇 Sound off' : '🔊 Sound on'}</button>

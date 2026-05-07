@@ -296,6 +296,17 @@ html, body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+#overlay-card .menu-tip {
+    background: rgba(255, 216, 77, 0.08);
+    border: 1px solid rgba(255, 216, 77, 0.18);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 10px 0 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
 #overlay-card .shortcuts {
     display: grid;
     grid-template-columns: 1fr 1fr;
