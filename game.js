@@ -2444,6 +2444,11 @@ function drawParticles() {
 }
 
 function updateParticles(dt) {
+    // Safety cap: drop the oldest if we ever blow past a sane upper bound
+    if (G.particles.length > 800) G.particles.splice(0, G.particles.length - 800);
+    if (G.floats.length > 60) G.floats.splice(0, G.floats.length - 60);
+    if (G.shockwaves.length > 30) G.shockwaves.splice(0, G.shockwaves.length - 30);
+    if (G.ghostTrails.length > 20) G.ghostTrails.splice(0, G.ghostTrails.length - 20);
     for (let i = G.particles.length - 1; i >= 0; i--) {
         const p = G.particles[i];
         p.age += dt;
@@ -2518,6 +2523,12 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// When the tab becomes visible again, reset the time delta so we don't
+// process a massive jump on the first frame (which can cause weird state).
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) lastT = performance.now();
+});
+
 function togglePause() {
     if (G.stage !== 'playing') return;
     G.paused = !G.paused;
@@ -2566,93 +2577,106 @@ function showPauseOverlay() {
 
 // ---------- Main loop ----------
 let lastT = performance.now();
+let frameErrLogged = 0;
 function frame(now) {
+    try {
+        runFrame(now);
+    } catch (e) {
+        // Don't let a single bad frame kill the render loop. Log up to ~10 errors
+        // so the console doesn't get flooded by a recurring issue.
+        if (frameErrLogged < 10) {
+            console.error('[frame]', e);
+            frameErrLogged++;
+        }
+    }
+    // Always schedule the next frame so the chain never dies.
+    requestAnimationFrame(frame);
+}
+
+function runFrame(now) {
     let dt = (now - lastT) / 1000;
     if (dt > 0.1) dt = 0.1;
     lastT = now;
 
-    if (G.paused) {
-        // Render only — no updates
-    } else if (G.hitstop > 0) {
-        G.hitstop -= dt;
-    } else {
-        const eff = dt * G.slowmo;
-        // updates
-        if (G.stage === 'playing') {
-            G.levelTime += eff;
-            // Combo decay
-            if (G.combo > 0) {
-                G.comboTimer -= eff;
-                if (G.comboTimer <= 0) G.combo = 0;
+    // ---- Update phase: isolated so a thrown error here can't stop rendering
+    try {
+        if (G.paused) {
+            // Render only — no updates
+        } else if (G.hitstop > 0) {
+            G.hitstop -= dt;
+        } else {
+            const eff = dt * G.slowmo;
+            // updates
+            if (G.stage === 'playing') {
+                G.levelTime += eff;
+                // Combo decay
+                if (G.combo > 0) {
+                    G.comboTimer -= eff;
+                    if (G.comboTimer <= 0) G.combo = 0;
+                }
             }
+            for (const cat of G.cats) updateCat(cat, eff);
+            updateParticles(eff);
+            updateDust(eff);
+            if (G.levelIntroT > 0) G.levelIntroT = Math.max(0, G.levelIntroT - eff);
+            if (G.stage === 'playing' && !G.laser.drawing && G.levelIntroT <= 0) G.idleT += eff;
+            else G.idleT = 0;
+            // Laser energy: drains while drawing, regens otherwise.
+            if (G.laser.drawing) {
+                G.laser.energy = Math.max(0, G.laser.energy - 0.18 * eff);
+                if (G.laser.energy <= 0) breakTrail('energy');
+            } else {
+                G.laser.energy = Math.min(1, G.laser.energy + 0.45 * eff);
+            }
+            try { fireHook('onUpdate', eff); } catch (e) { console.error('[onUpdate]', e); }
+            // Shake
+            if (G.shakeT > 0) {
+                G.shakeT -= eff;
+                G.shakeAmp *= Math.pow(0.001, eff);
+                G.shakeX = (Math.random() - 0.5) * G.shakeAmp;
+                G.shakeY = (Math.random() - 0.5) * G.shakeAmp;
+            } else {
+                G.shakeAmp = 0; G.shakeX = 0; G.shakeY = 0;
+            }
+            if (G.flash > 0) G.flash = Math.max(0, G.flash - eff * 2.4);
+            const target = clamp(G.combo / 8, 0, 1);
+            G.flow += (target - G.flow) * Math.min(1, eff * 4);
+            const hyperTarget = G.combo >= 10 ? 1 : 0;
+            const wasHyper = G.hyperdrive;
+            G.hyperdrive = G.combo >= 10;
+            if (G.hyperdrive && !wasHyper) {
+                FX.flash('255,200,80', 0.4);
+                FX.shake(10, 0.4);
+                FX.floatText(W / 2, H * 0.4, 'HYPERDRIVE!', '#ffd84d', 44);
+                FX.spawnConfetti(W / 2, H * 0.5, 60, { color: '#ffd84d', spread: 360, lifeMin: 0.8, lifeMax: 1.4 });
+                if (audioUnlocked) Audio.SFX.capture();
+            }
+            G.hyperdriveT += (hyperTarget - G.hyperdriveT) * Math.min(1, eff * 3);
+            if (G.transitionDir !== 0) {
+                G.transitionT += G.transitionDir * eff * 2.4;
+                if (G.transitionT <= 0) { G.transitionT = 0; G.transitionDir = 0; }
+                else if (G.transitionT >= 1) { G.transitionT = 1; G.transitionDir = 0; }
+            }
+            if (G.promotionT > 0) G.promotionT = Math.max(0, G.promotionT - eff);
+            G.time += eff;
         }
-        for (const cat of G.cats) updateCat(cat, eff);
-        updateParticles(eff);
-        updateDust(eff);
-        if (G.levelIntroT > 0) G.levelIntroT = Math.max(0, G.levelIntroT - eff);
-        if (G.stage === 'playing' && !G.laser.drawing && G.levelIntroT <= 0) G.idleT += eff;
-        else G.idleT = 0;
-        // Laser energy: drains while drawing, regens otherwise.
-        // Drain at ~0.18/s while drawing, regen at ~0.45/s while idle.
-        if (G.laser.drawing) {
-            G.laser.energy = Math.max(0, G.laser.energy - 0.18 * eff);
-            if (G.laser.energy <= 0) breakTrail('energy');
-        } else {
-            G.laser.energy = Math.min(1, G.laser.energy + 0.45 * eff);
-        }
-        fireHook('onUpdate', eff);
-        // Shake
-        if (G.shakeT > 0) {
-            G.shakeT -= eff;
-            G.shakeAmp *= Math.pow(0.001, eff);
-            G.shakeX = (Math.random() - 0.5) * G.shakeAmp;
-            G.shakeY = (Math.random() - 0.5) * G.shakeAmp;
-        } else {
-            G.shakeAmp = 0; G.shakeX = 0; G.shakeY = 0;
-        }
-        // Flash
-        if (G.flash > 0) G.flash = Math.max(0, G.flash - eff * 2.4);
-        // Flow smoothing
-        const target = clamp(G.combo / 8, 0, 1);
-        G.flow += (target - G.flow) * Math.min(1, eff * 4);
-        // Hyperdrive (combo >= 10)
-        const hyperTarget = G.combo >= 10 ? 1 : 0;
-        const wasHyper = G.hyperdrive;
-        G.hyperdrive = G.combo >= 10;
-        if (G.hyperdrive && !wasHyper) {
-            // Entering hyperdrive
-            FX.flash('255,200,80', 0.4);
-            FX.shake(10, 0.4);
-            FX.floatText(W / 2, H * 0.4, 'HYPERDRIVE!', '#ffd84d', 44);
-            FX.spawnConfetti(W / 2, H * 0.5, 60, { color: '#ffd84d', spread: 360, lifeMin: 0.8, lifeMax: 1.4 });
-            if (audioUnlocked) Audio.SFX.capture();
-        }
-        G.hyperdriveT += (hyperTarget - G.hyperdriveT) * Math.min(1, eff * 3);
-        // Transition fade
-        if (G.transitionDir !== 0) {
-            G.transitionT += G.transitionDir * eff * 2.4;
-            if (G.transitionT <= 0) { G.transitionT = 0; G.transitionDir = 0; }
-            else if (G.transitionT >= 1) { G.transitionT = 1; G.transitionDir = 0; }
-        }
-        if (G.promotionT > 0) G.promotionT = Math.max(0, G.promotionT - eff);
-        G.time += eff;
+    } catch (e) {
+        if (frameErrLogged < 10) { console.error('[update]', e); frameErrLogged++; }
     }
 
-    // Render
+    // ---- Render phase: isolated similarly. Always draws.
     ctx.clearRect(0, 0, W, H);
     ctx.save();
-    ctx.translate(G.shakeX, G.shakeY);
-    drawBackground(G.time);
-    drawDust();
-    drawTrail();
-    // World-space additions (powerups, etc.)
-    fireHook('onDraw', ctx);
-    // Cats
-    for (const cat of G.cats) drawCat(cat);
-    drawParticles();
-    drawLaser();
+    ctx.translate(G.shakeX || 0, G.shakeY || 0);
+    try { drawBackground(G.time); } catch (e) { console.error('[bg]', e); }
+    try { drawDust(); } catch (e) { console.error('[dust]', e); }
+    try { drawTrail(); } catch (e) { console.error('[trail]', e); }
+    try { fireHook('onDraw', ctx); } catch (e) { console.error('[onDraw]', e); }
+    try { for (const cat of G.cats) drawCat(cat); } catch (e) { console.error('[cats]', e); }
+    try { drawParticles(); } catch (e) { console.error('[particles]', e); }
+    try { drawLaser(); } catch (e) { console.error('[laser]', e); }
     ctx.restore();
-    fireHook('onDrawHUD', ctx);
+    try { fireHook('onDrawHUD', ctx); } catch (e) { console.error('[onDrawHUD]', e); }
 
     // Hyperdrive vignette + edge pulse
     if (G.hyperdriveT > 0.01) {
@@ -2686,8 +2710,6 @@ function frame(now) {
     drawPromotionBanner();
 
     updateHud();
-
-    requestAnimationFrame(frame);
 }
 
 function drawPromotionBanner() {
