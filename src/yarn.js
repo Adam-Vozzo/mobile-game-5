@@ -65,9 +65,7 @@
         for (let i = 0; i < n; i++) balls.push(spawnBall(W, H));
     }
 
-    // ------------------------------------------------------------------
-    // Update
-    // ------------------------------------------------------------------
+    // ---- Update ----
     function update(dt) {
         if (G.stage !== 'playing') {
             laserPrev.has = false;   // avoid bogus velocity spike on resume
@@ -154,9 +152,7 @@
         }
     }
 
-    // ------------------------------------------------------------------
-    // Draw — runs in shaken world space
-    // ------------------------------------------------------------------
+    // ---- Draw (in shaken world space) ----
     function draw(c) {
         if (!balls.length) return;
         c.save();
@@ -237,9 +233,7 @@
         }
     }
 
-    // ------------------------------------------------------------------
-    // Hook registration
-    // ------------------------------------------------------------------
+    // ---- Hook registration ----
     HOOKS.onLevelStart.push(() => resetForLevel());
     HOOKS.onUpdate.push((dt) => update(dt));
     HOOKS.onDraw.push((c) => draw(c));
