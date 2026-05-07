@@ -1,9 +1,8 @@
 // ============================================================================
 // achievement-viewer.js — Achievements viewer screen for "Make the Cat Dizzy!"
-// ----------------------------------------------------------------------------
-// Self-contained module. Adds a small trophy button at top-center of the HUD
-// that opens a centered panel listing all 11 achievements, mirroring the IDs
-// that achievements.js persists in localStorage under "mtcd_achievements".
+// Self-contained module. Adds a trophy button at top-center of the HUD that
+// opens a centered panel listing all 11 achievements. Reads unlocked IDs from
+// localStorage["mtcd_achievements"] (an array, written by achievements.js).
 // ============================================================================
 (function () {
     'use strict';
@@ -20,24 +19,21 @@
     // Mirror of achievements.js definitions (achievements.js doesn't expose
     // descriptions/icons, so we duplicate the catalog here intentionally).
     const ACHIEVEMENTS = [
-        { id: 'first_catch',         name: 'First Catch',         desc: 'Capture your first cat.',                  icon: '🐾', color: '#ffd84d' },
-        { id: 'combo_5',             name: 'On a Roll',            desc: 'Reach a 5x combo.',                        icon: '🔥', color: '#ff6e3b' },
-        { id: 'combo_10',            name: 'Unstoppable',          desc: 'Reach a 10x combo.',                       icon: '⚡', color: '#7cd6ff' },
-        { id: 'score_10000',         name: 'High Roller',          desc: 'Score 10,000 in a single run.',            icon: '💎', color: '#9b6cff' },
-        { id: 'score_50000',         name: 'Laser Virtuoso',       desc: 'Score 50,000 in a single run.',            icon: '🌟', color: '#ffec5e' },
-        { id: 'reach_level_5',       name: 'Cat Wrangler',         desc: 'Reach Level 5.',                           icon: '🎯', color: '#4dffb6' },
-        { id: 'boss_slayer',         name: 'Boss Slayer',          desc: 'Capture a boss cat.',                      icon: '👑', color: '#ff3b6e' },
-        { id: 'flawless_level',      name: 'Flawless',             desc: 'Clear a level without breaking your line.',icon: '✨', color: '#a4dc4d' },
-        { id: 'catnip_connoisseur',  name: 'Catnip Connoisseur',   desc: 'Influence 5 cats with catnip.',            icon: '🌿', color: '#a4dc4d' },
-        { id: 'persistent_pointer',  name: 'Persistent Pointer',   desc: 'Capture 25 cats across all runs.',         icon: '🏆', color: '#ffb84d' },
-        { id: 'big_loop',            name: 'Big Loop Energy',      desc: 'Make a single loop with area >= 60,000.',  icon: '🌀', color: '#7cd6ff' },
+        { id: 'first_catch',         name: 'First Catch',        desc: 'Capture your first cat.',                   icon: '🐾', color: '#ffd84d' },
+        { id: 'combo_5',             name: 'On a Roll',          desc: 'Reach a 5x combo.',                         icon: '🔥', color: '#ff6e3b' },
+        { id: 'combo_10',            name: 'Unstoppable',        desc: 'Reach a 10x combo.',                        icon: '⚡', color: '#7cd6ff' },
+        { id: 'score_10000',         name: 'High Roller',        desc: 'Score 10,000 in a single run.',             icon: '💎', color: '#9b6cff' },
+        { id: 'score_50000',         name: 'Laser Virtuoso',     desc: 'Score 50,000 in a single run.',             icon: '🌟', color: '#ffec5e' },
+        { id: 'reach_level_5',       name: 'Cat Wrangler',       desc: 'Reach Level 5.',                            icon: '🎯', color: '#4dffb6' },
+        { id: 'boss_slayer',         name: 'Boss Slayer',        desc: 'Capture a boss cat.',                       icon: '👑', color: '#ff3b6e' },
+        { id: 'flawless_level',      name: 'Flawless',           desc: 'Clear a level without breaking your line.', icon: '✨', color: '#a4dc4d' },
+        { id: 'catnip_connoisseur',  name: 'Catnip Connoisseur', desc: 'Influence 5 cats with catnip.',             icon: '🌿', color: '#a4dc4d' },
+        { id: 'persistent_pointer',  name: 'Persistent Pointer', desc: 'Capture 25 cats across all runs.',          icon: '🏆', color: '#ffb84d' },
+        { id: 'big_loop',            name: 'Big Loop Energy',    desc: 'Make a single loop with area >= 60,000.',   icon: '🌀', color: '#7cd6ff' },
     ];
 
-    // ---------- UI state ----------
     const ui = {
-        open: false,
-        openT: 0,
-        phase: 0,
+        open: false, openT: 0, phase: 0,
         toggleRect: { x: 0, y: 0, w: 0, h: 0 },
         closeRect: { x: 0, y: 0, w: 0, h: 0 },
         pausedByUs: false,
@@ -81,14 +77,24 @@
     function truncate(c, str, maxW) {
         if (!str) return '';
         if (c.measureText(str).width <= maxW) return str;
-        const ell = '…';
         let lo = 0, hi = str.length;
         while (lo < hi) {
             const mid = (lo + hi + 1) >> 1;
-            if (c.measureText(str.slice(0, mid) + ell).width <= maxW) lo = mid;
+            if (c.measureText(str.slice(0, mid) + '…').width <= maxW) lo = mid;
             else hi = mid - 1;
         }
-        return str.slice(0, lo) + ell;
+        return str.slice(0, lo) + '…';
+    }
+
+    function hexToRgba(hex, a) {
+        if (typeof hex !== 'string') return `rgba(255,216,77,${a})`;
+        let h = hex.replace('#', '');
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        if (h.length !== 6) return `rgba(255,216,77,${a})`;
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return `rgba(${r},${g},${b},${a})`;
     }
 
     function clickSfx() {
@@ -103,12 +109,8 @@
         if (ui.open) return;
         ui.open = true;
         ui.openT = 0;
-        if (MTCD.G && !MTCD.G.paused) {
-            MTCD.G.paused = true;
-            ui.pausedByUs = true;
-        } else {
-            ui.pausedByUs = false;
-        }
+        if (MTCD.G && !MTCD.G.paused) { MTCD.G.paused = true; ui.pausedByUs = true; }
+        else { ui.pausedByUs = false; }
         clickSfx();
     }
     function close() {
@@ -119,7 +121,7 @@
         clickSfx();
     }
 
-    // ---------- Per-frame anim ----------
+    // ---------- Animation ----------
     HOOKS.onUpdate.push((dt) => {
         ui.phase += dt;
         const target = ui.open ? 1 : 0;
@@ -131,7 +133,7 @@
     // ---------- Toggle button (top-center HUD) ----------
     function drawToggleButton(c) {
         const { W } = size();
-        const r = 18; // 36x36 circle
+        const r = 18;
         const cx = W * 0.5;
         const cy = 80;
         ui.toggleRect = { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
@@ -140,7 +142,6 @@
         c.shadowColor = 'rgba(0,0,0,0.45)';
         c.shadowBlur = 10;
         c.shadowOffsetY = 2;
-
         const grd = c.createRadialGradient(cx, cy - 4, 2, cx, cy, r + 2);
         grd.addColorStop(0, 'rgba(64, 44, 96, 0.95)');
         grd.addColorStop(1, 'rgba(28, 18, 46, 0.95)');
@@ -148,10 +149,7 @@
         c.beginPath();
         c.arc(cx, cy, r, 0, Math.PI * 2);
         c.fill();
-
-        c.shadowColor = 'transparent';
-        c.shadowBlur = 0;
-        c.shadowOffsetY = 0;
+        c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0;
 
         const pulse = 0.5 + 0.5 * Math.sin(ui.phase * 2.2);
         c.strokeStyle = `rgba(255, 216, 77, ${0.40 + 0.30 * pulse})`;
@@ -165,7 +163,6 @@
         c.textBaseline = 'middle';
         c.fillStyle = '#ffffff';
         c.fillText('🏆', cx, cy + 1);
-
         c.restore();
     }
 
@@ -176,56 +173,45 @@
         const phase = smoothstep(ui.openT);
         const unlocked = loadUnlocked();
 
-        // Backdrop
         c.save();
         c.fillStyle = `rgba(8, 4, 18, ${0.62 * phase})`;
         c.fillRect(0, 0, W, H);
         c.restore();
 
-        // Panel sizing — ~620x520, capped at 88% of canvas.
         const pw = Math.min(620, W * 0.88);
         const ph = Math.min(520, H * 0.88);
         const px = (W - pw) * 0.5;
-        const slide = (1 - phase) * 24;
-        const py = (H - ph) * 0.5 + slide;
+        const py = (H - ph) * 0.5 + (1 - phase) * 24;
 
         c.save();
         c.globalAlpha = phase;
-
         c.shadowColor = 'rgba(0,0,0,0.55)';
         c.shadowBlur = 28;
         c.shadowOffsetY = 8;
-
         const grd = c.createLinearGradient(px, py, px, py + ph);
         grd.addColorStop(0, 'rgba(38, 26, 60, 0.96)');
         grd.addColorStop(1, 'rgba(18, 10, 30, 0.96)');
         c.fillStyle = grd;
         roundedPath(c, px, py, pw, ph, 18);
         c.fill();
-
-        c.shadowColor = 'transparent';
-        c.shadowBlur = 0;
-        c.shadowOffsetY = 0;
+        c.shadowColor = 'transparent'; c.shadowBlur = 0; c.shadowOffsetY = 0;
 
         c.strokeStyle = 'rgba(255,255,255,0.10)';
         c.lineWidth = 1;
         roundedPath(c, px + 0.5, py + 0.5, pw - 1, ph - 1, 18);
         c.stroke();
 
-        // Title
         c.fillStyle = '#ffffff';
         c.font = '800 28px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
         c.textAlign = 'left';
         c.textBaseline = 'top';
         c.fillText('Achievements', px + 24, py + 20);
 
-        // Subtitle
-        const totalAch = ACHIEVEMENTS.length;
         let unlockedCount = 0;
         for (const a of ACHIEVEMENTS) if (unlocked.has(a.id)) unlockedCount++;
         c.fillStyle = 'rgba(220, 215, 235, 0.75)';
         c.font = '500 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-        c.fillText(`${unlockedCount} / ${totalAch} unlocked`, px + 24, py + 54);
+        c.fillText(`${unlockedCount} / ${ACHIEVEMENTS.length} unlocked`, px + 24, py + 54);
 
         // Close button
         const closeSize = 40;
@@ -245,7 +231,7 @@
         c.textBaseline = 'middle';
         c.fillText('×', cbx + closeSize * 0.5, cby + closeSize * 0.5 + 1);
 
-        // Card grid: 2 cols on wide panels, 1 col on narrow.
+        // Card grid (2 cols on wide, 1 col on narrow).
         const cols = pw < 520 ? 1 : 2;
         const gridX = px + 22;
         const gridYTop = py + 92;
@@ -257,14 +243,13 @@
         c.save();
         roundedPath(c, gridX - 4, gridYTop - 4, gridW + 8, ph - (gridYTop - py) - 18, 12);
         c.clip();
-
         for (let i = 0; i < ACHIEVEMENTS.length; i++) {
-            const a = ACHIEVEMENTS[i];
             const col = i % cols;
             const row = (i / cols) | 0;
-            const cx = gridX + col * (cardW + gap);
-            const cy = gridYTop + row * (cardH + gap);
-            drawCard(c, cx, cy, cardW, cardH, a, unlocked.has(a.id));
+            drawCard(c,
+                gridX + col * (cardW + gap),
+                gridYTop + row * (cardH + gap),
+                cardW, cardH, ACHIEVEMENTS[i], unlocked.has(ACHIEVEMENTS[i].id));
         }
         c.restore();
         c.restore();
@@ -272,7 +257,6 @@
 
     function drawCard(c, x, y, w, h, ach, isUnlocked) {
         c.save();
-
         const grd = c.createLinearGradient(x, y, x, y + h);
         if (isUnlocked) {
             grd.addColorStop(0, 'rgba(60, 44, 96, 0.85)');
@@ -290,7 +274,7 @@
         roundedPath(c, x + 0.5, y + 0.5, w - 1, h - 1, 12);
         c.stroke();
 
-        // Icon circle on the left.
+        // Icon circle
         const iconR = 22;
         const iconCx = x + iconR + 12;
         const iconCy = y + h * 0.5;
@@ -305,7 +289,6 @@
         c.arc(iconCx, iconCy, iconR - 0.6, 0, Math.PI * 2);
         c.stroke();
 
-        // Icon glyph (greyed when locked).
         c.font = '600 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
         c.textAlign = 'center';
         c.textBaseline = 'middle';
@@ -314,7 +297,7 @@
         c.fillText(ach.icon || '🏆', iconCx, iconCy + 1);
         c.globalAlpha = 1;
 
-        // Lock badge overlay for locked achievements.
+        // Lock badge for locked achievements.
         if (!isUnlocked) {
             const bx = iconCx + iconR - 8;
             const by = iconCy + iconR - 8;
@@ -332,10 +315,9 @@
             c.fillText('🔒', bx, by + 1);
         }
 
-        // Text column.
+        // Text column
         const textX = iconCx + iconR + 12;
         const textW = (x + w) - textX - 12;
-
         c.textAlign = 'left';
         c.textBaseline = 'top';
         c.font = '700 15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -352,26 +334,13 @@
             c.fillText(truncate(c, 'Locked — ' + ach.desc, textW), textX, y + 36);
         }
 
-        // "Unlocked" pill on the bottom-right of unlocked cards.
         if (isUnlocked) {
             c.font = '800 10px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
             c.fillStyle = hexToRgba(accent, 0.95);
             c.textAlign = 'right';
             c.fillText('UNLOCKED', x + w - 12, y + h - 16);
         }
-
         c.restore();
-    }
-
-    function hexToRgba(hex, a) {
-        if (typeof hex !== 'string') return `rgba(255,216,77,${a})`;
-        let h = hex.replace('#', '');
-        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-        if (h.length !== 6) return `rgba(255,216,77,${a})`;
-        const r = parseInt(h.slice(0, 2), 16);
-        const g = parseInt(h.slice(2, 4), 16);
-        const b = parseInt(h.slice(4, 6), 16);
-        return `rgba(${r},${g},${b},${a})`;
     }
 
     // ---------- HUD draw ----------
@@ -403,32 +372,19 @@
         const p = eventToCanvas(e);
         if (!p) return;
         if (ui.open) {
-            if (pointInRect(p.x, p.y, ui.closeRect)) {
-                close();
-                swallow(e);
-                return;
-            }
-            // Absorb every other click while panel is open.
+            if (pointInRect(p.x, p.y, ui.closeRect)) { close(); swallow(e); return; }
             swallow(e);
             return;
         }
-        if (pointInRect(p.x, p.y, ui.toggleRect)) {
-            open();
-            swallow(e);
-        }
+        if (pointInRect(p.x, p.y, ui.toggleRect)) { open(); swallow(e); }
     }
 
     document.addEventListener('mousedown', handlePress, true);
     document.addEventListener('touchstart', handlePress, { capture: true, passive: false });
-
     document.addEventListener('keydown', (e) => {
         if (!ui.open) return;
-        if (e.key === 'Escape') {
-            close();
-            swallow(e);
-        }
+        if (e.key === 'Escape') { close(); swallow(e); }
     }, true);
 
-    // ---------- Public surface ----------
     MTCD.achievementViewer = { open, close };
 })();

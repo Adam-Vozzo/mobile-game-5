@@ -893,6 +893,7 @@ function createCat(typeId, x, y) {
         meowCooldown: rand(2, 6),
         phaseAlpha: 1,
         phaseTimer: 0,
+        stillT: 0,              // seconds nearly stationary
     };
 }
 
@@ -1004,6 +1005,9 @@ function updateCat(cat, dt) {
     const speed = Math.hypot(cat.vx, cat.vy);
     cat.walkPhase += dt * (4 + speed * 0.04);
     cat.tailPhase += dt * 3;
+    // Idle tracking — sleepy when cat hasn't really moved for a while
+    if (speed < 14) cat.stillT += dt;
+    else cat.stillT = 0;
 }
 
 function beginAttack(cat, dx, dy, d) {
@@ -1166,6 +1170,23 @@ function drawCat(cat) {
     ctx.scale(s * cat.facing, s);
     drawCatSprite(cat, wob);
     ctx.restore();
+
+    // Sleepy Z's drift up when the cat has been still for a while
+    if (cat.stillT > 3.5 && !cat.attackState && !cat.captured && cat.captureProgress === 0) {
+        const t01 = clamp((cat.stillT - 3.5) / 1.5, 0, 1);
+        const driftT = (cat.stillT - 3.5) % 2.0;
+        const zx = cat.x + cat.size * 0.6 + driftT * 12;
+        const zy = cat.y - cat.size - 8 - driftT * 22;
+        const alpha = (driftT < 0.2 ? driftT / 0.2 : (driftT > 1.8 ? (2.0 - driftT) / 0.2 : 1)) * t01;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.font = `bold ${14 + driftT * 4}px system-ui, sans-serif`;
+        ctx.fillStyle = '#bcd6ff';
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.fillText('z', zx, zy);
+        ctx.restore();
+    }
 
     // Capture progress ring (in world space, no rotation)
     drawCatHUD(cat);
@@ -2680,13 +2701,14 @@ function drawLevelIntro() {
         ctx.shadowBlur = 16;
         ctx.shadowColor = 'rgba(0,0,0,0.7)';
         const wobble = Math.sin(performance.now() * 0.012) * 4;
-        ctx.font = 'bold 22px system-ui, sans-serif';
+        const ts = clamp(W / 800, 0.6, 1);
+        ctx.font = `bold ${22 * ts}px system-ui, sans-serif`;
         ctx.fillStyle = '#ff3b6e';
         ctx.fillText('⚠ BOSS WAVE ⚠', W / 2 + wobble, H * 0.38);
-        ctx.font = 'bold 52px system-ui, sans-serif';
+        ctx.font = `bold ${52 * ts}px system-ui, sans-serif`;
         ctx.fillStyle = '#fff';
         ctx.fillText(boss.type.name.toUpperCase(), W / 2, H * 0.48);
-        ctx.font = 'bold 16px system-ui, sans-serif';
+        ctx.font = `bold ${16 * ts}px system-ui, sans-serif`;
         ctx.fillStyle = '#ff8aa9';
         ctx.fillText(`${boss.type.loops} LOOPS REQUIRED`, W / 2, H * 0.54);
         ctx.restore();
@@ -2699,15 +2721,16 @@ function drawLevelIntro() {
     ctx.shadowBlur = 12;
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
 
-    ctx.font = 'bold 18px system-ui, sans-serif';
+    const titleScale = clamp(W / 800, 0.6, 1);
+    ctx.font = `bold ${18 * titleScale}px system-ui, sans-serif`;
     ctx.fillStyle = (scene && scene.accent) || '#ffd84d';
     ctx.fillText(`LEVEL ${G.level}`, W / 2, H * 0.32);
 
-    ctx.font = 'bold 44px system-ui, sans-serif';
+    ctx.font = `bold ${44 * titleScale}px system-ui, sans-serif`;
     ctx.fillStyle = '#fff';
     ctx.fillText(sceneName, W / 2, H * 0.40);
 
-    ctx.font = '16px system-ui, sans-serif';
+    ctx.font = `${16 * titleScale}px system-ui, sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillText(remaining === 1 ? 'Catch the cat!' : `Catch ${remaining} cats!`, W / 2, H * 0.45);
 
