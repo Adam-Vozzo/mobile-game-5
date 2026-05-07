@@ -214,26 +214,17 @@
     HOOKS.onDraw.push((ctx) => {
         if (!state.ghosts.length) return;
         for (const g of state.ghosts) {
-            const t = g.age / g.life;                  // 0..1
-            const fadeIn = Math.min(1, t * 3);
-            const fadeOut = 1 - Math.max(0, (t - 0.7) / 0.3);
-            const alpha = Math.max(0, Math.min(1, Math.min(fadeIn, fadeOut))) * 0.7;
-            const wave = Math.sin(g.age * 8) * 0.3;
+            const t = g.age / g.life;
+            const alpha = Math.max(0, Math.min(Math.min(1, t * 3),
+                1 - Math.max(0, (t - 0.7) / 0.3))) * 0.7;
             ctx.save();
             ctx.globalAlpha = alpha;
-            // Body
             ctx.fillStyle = '#e8f0ff';
-            ctx.beginPath();
-            ctx.ellipse(g.x, g.y, 14, 16, 0, 0, TAU);
-            ctx.fill();
+            ctx.beginPath(); ctx.ellipse(g.x, g.y, 14, 16, 0, 0, TAU); ctx.fill();
             // Ears
             ctx.beginPath();
-            ctx.moveTo(g.x - 9, g.y - 12);
-            ctx.lineTo(g.x - 4, g.y - 22);
-            ctx.lineTo(g.x - 1, g.y - 13);
-            ctx.moveTo(g.x + 9, g.y - 12);
-            ctx.lineTo(g.x + 4, g.y - 22);
-            ctx.lineTo(g.x + 1, g.y - 13);
+            ctx.moveTo(g.x - 9, g.y - 12); ctx.lineTo(g.x - 4, g.y - 22); ctx.lineTo(g.x - 1, g.y - 13);
+            ctx.moveTo(g.x + 9, g.y - 12); ctx.lineTo(g.x + 4, g.y - 22); ctx.lineTo(g.x + 1, g.y - 13);
             ctx.fill();
             // Eyes
             ctx.fillStyle = '#3a4a8a';
@@ -241,14 +232,11 @@
             ctx.arc(g.x - 4, g.y - 4, 1.6, 0, TAU);
             ctx.arc(g.x + 4, g.y - 4, 1.6, 0, TAU);
             ctx.fill();
-            // Waving "paw" — a small arm that swings
-            ctx.strokeStyle = '#e8f0ff';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
+            // Waving paw
+            ctx.strokeStyle = '#e8f0ff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(g.x + 11, g.y + 2);
-            ctx.lineTo(g.x + 11 + Math.cos(g.age * 8) * 8,
-                       g.y + 2 - 6 + wave * 4);
+            ctx.lineTo(g.x + 11 + Math.cos(g.age * 8) * 8, g.y - 4);
             ctx.stroke();
             ctx.restore();
         }
