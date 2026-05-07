@@ -58,6 +58,8 @@ const G = {
     bg: { stars: [], dust: [] },
     flow: 0,                // smoothed combo intensity for visual juice
     levelIntroT: 0,         // countdown for the "Level N: Scene" intro splash
+    idleT: 0,               // seconds since the player last drew anything in a level
+    levelCaptures: [],      // list of captured cat type defs for level-complete breakdown
 };
 window.G = G; // expose for tinkering
 
@@ -1422,6 +1424,7 @@ function startDrawing(x, y) {
     G.laser.active = true;
     G.laser.x = x; G.laser.y = y;
     G.trail = [{ x, y, t: performance.now() }];
+    G.idleT = 0;
     if (audioUnlocked) Audio.SFX.laserStart();
 }
 
@@ -1582,6 +1585,7 @@ function captureCat(cat) {
     cat.vx = (Math.random() - 0.5) * 80;
     cat.vy = -260;
     G.capturesLeft -= 1;
+    G.levelCaptures.push(cat.type);
     const bonus = 500 + cat.type.loops * 200;
     G.score += bonus;
     // Layered capture FX: triple shockwave, gold + scene-accent confetti,
@@ -1672,6 +1676,8 @@ function startLevel(n) {
     }
     G.stage = 'playing';
     G.levelIntroT = 2.4;
+    G.idleT = 0;
+    G.levelCaptures = [];
     hideOverlay();
     if (audioUnlocked) Audio.SFX.click();
     fireHook('onLevelStart', n);
@@ -1724,13 +1730,24 @@ function showMenuOverlay() {
 
 function showLevelCompleteOverlay() {
     const isBossLevel = G.cats.some(c => c.type.isBoss);
+    // Build captured-cats roster as colored chips
+    const captured = G.levelCaptures || [];
+    const rosterHtml = captured.length
+        ? '<div class="roster">' + captured.map(t => {
+            const tag = t.isBoss ? ' boss' : '';
+            return `<span class="chip${tag}" style="--chip:${t.body}">${t.name}</span>`;
+        }).join('') + '</div>'
+        : '';
+    const sceneName = (SCENES[G.scene] && SCENES[G.scene].name) || '';
     overlayCard.innerHTML = `
         <h1>${isBossLevel ? 'Boss caught!' : 'Level cleared!'}</h1>
+        <p class="subtitle">${sceneName}</p>
         <p class="result">
             Score
             <span class="big">${G.score}</span>
             ${G.bestScore === G.score && G.score > 0 ? '<span class="best-tag">NEW BEST</span>' : ''}
         </p>
+        ${rosterHtml}
         <div class="stat-row">
             <div><span class="lbl">Level</span><span class="val">${G.level}</span></div>
             <div><span class="lbl">Time</span><span class="val">${G.levelTime.toFixed(1)}s</span></div>
@@ -1895,6 +1912,30 @@ function drawLaser() {
     ctx.beginPath();
     ctx.arc(laser.x, laser.y, 40, 0, TAU);
     ctx.fill();
+
+    // Combo timer ring around the laser
+    if (G.combo > 0 && G.comboTimer > 0) {
+        const t01 = clamp(G.comboTimer / 2.5, 0, 1);
+        const sweep = TAU * t01;
+        const r = 14 + (G.combo > 4 ? 4 : 0);
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = G.combo >= 7 ? '#ffd84d' : (G.combo >= 4 ? '#ff8a44' : '#ff5566');
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, r, -Math.PI / 2, -Math.PI / 2 + sweep);
+        ctx.stroke();
+        // Combo number
+        if (G.combo >= 2) {
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx.font = `bold ${G.combo >= 7 ? 14 : 12}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`×${G.combo}`, laser.x, laser.y - r - 6);
+        }
+    }
+
     ctx.fillStyle = '#fff';
     ctx.shadowBlur = 16;
     ctx.shadowColor = '#ff2244';
@@ -2092,6 +2133,8 @@ function frame(now) {
         updateParticles(eff);
         updateDust(eff);
         if (G.levelIntroT > 0) G.levelIntroT = Math.max(0, G.levelIntroT - eff);
+        if (G.stage === 'playing' && !G.laser.drawing && G.levelIntroT <= 0) G.idleT += eff;
+        else G.idleT = 0;
         fireHook('onUpdate', eff);
         // Shake
         if (G.shakeT > 0) {
@@ -2133,10 +2176,45 @@ function frame(now) {
     }
 
     drawLevelIntro();
+    drawIdleHint();
 
     updateHud();
 
     requestAnimationFrame(frame);
+}
+
+function drawIdleHint() {
+    if (G.idleT < 4 || G.stage !== 'playing') return;
+    // Pick the closest live cat to the laser
+    const live = G.cats.filter(c => !c.captured);
+    if (live.length === 0) return;
+    let target = live[0];
+    let bestD = Infinity;
+    for (const c of live) {
+        const d = dist(c.x, c.y, G.laser.x, G.laser.y);
+        if (d < bestD) { bestD = d; target = c; }
+    }
+    // Show a pulsing dashed circle around the cat with a "Hold and circle me!" label
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() * 0.005);
+    const r = target.size * 1.8;
+    const fade = clamp((G.idleT - 4) / 0.5, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = 0.5 * fade * pulse;
+    ctx.strokeStyle = '#ffd84d';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.lineDashOffset = -performance.now() * 0.04;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, r, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Hint text
+    ctx.globalAlpha = 0.7 * fade;
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd84d';
+    ctx.fillText('Hold and circle the cat!', target.x, target.y - r - 10);
+    ctx.restore();
 }
 
 function drawLevelIntro() {
