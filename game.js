@@ -66,6 +66,8 @@ const G = {
     levelHadBreak: false,   // tracks whether the player broke their line this level
     transitionT: 0,         // 0..1 fade alpha for scene transitions (0 = invisible)
     transitionDir: 0,       // 1 fading to black, -1 fading back, 0 idle
+    promotionT: 0,          // seconds remaining on the rank promotion banner
+    promotionRank: null,    // rank object during promotion display
 };
 window.G = G; // expose for tinkering
 
@@ -333,6 +335,31 @@ const FX = {
 
 function pickConfettiColor() {
     return choice(['#ffd84d', '#ff6e3b', '#ff3b6e', '#9b6cff', '#6cd2ff', '#4dffb6', '#ffeb3b']);
+}
+
+// Ranger ranks — based on total cats caught across all runs
+const RANGER_RANKS = [
+    { min: 0,   id: 'cadet',     name: 'Cadet',         color: '#9b9bbb', badge: '◎' },
+    { min: 10,  id: 'ranger',    name: 'Ranger',        color: '#7cd6ff', badge: '✦' },
+    { min: 30,  id: 'sergeant',  name: 'Sergeant',      color: '#4dffb6', badge: '✦✦' },
+    { min: 60,  id: 'captain',   name: 'Captain',       color: '#ffd84d', badge: '★' },
+    { min: 100, id: 'master',    name: 'Master Ranger', color: '#ff8aff', badge: '★★' },
+    { min: 200, id: 'legend',    name: 'Legend',        color: '#ff3b6e', badge: '★★★' },
+];
+
+function rangerRankFor(totalCaught) {
+    let cur = RANGER_RANKS[0];
+    for (const r of RANGER_RANKS) if (totalCaught >= r.min) cur = r;
+    return cur;
+}
+
+function getTotalCaught() {
+    try {
+        const dex = JSON.parse(localStorage.getItem('mtcd_catdex') || '{}');
+        let n = 0;
+        for (const k in dex) n += dex[k] | 0;
+        return n;
+    } catch { return 0; }
 }
 
 // ---------- Hooks / extension API ----------
@@ -1856,6 +1883,7 @@ function registerLoop(cat, poly, area, opts = {}) {
 }
 
 function captureCat(cat) {
+    const prevRank = rangerRankFor(getTotalCaught());
     cat.captured = true;
     cat.vx = (Math.random() - 0.5) * 80;
     cat.vy = -260;
@@ -1892,9 +1920,35 @@ function captureCat(cat) {
     if (audioUnlocked) { Audio.SFX.capture(); Audio.SFX.purr(); }
     fireHook('onCapture', cat, bonus);
 
+    // Rank promotion check (catdex persists synchronously via the hook above)
+    const newRank = rangerRankFor(getTotalCaught());
+    if (newRank.id !== prevRank.id) {
+        triggerPromotion(newRank);
+    }
+
     if (G.capturesLeft <= 0) {
         setTimeout(levelComplete, 900);
     }
+}
+
+function triggerPromotion(rank) {
+    G.promotionT = 3.0;  // seconds visible
+    G.promotionRank = rank;
+    FX.flash(hexToRgb(rank.color), 0.4);
+    FX.shake(14, 0.5);
+    FX.shockwave(W / 2, H / 2, rank.color, Math.max(W, H) * 0.5, 0.8);
+    FX.spawnConfetti(W / 2, H * 0.4, 80, { color: rank.color, spread: 360, lifeMin: 1.0, lifeMax: 2.0 });
+    if (audioUnlocked) {
+        Audio.SFX.levelComplete();
+    }
+}
+
+function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substr(0, 2), 16);
+    const g = parseInt(h.substr(2, 2), 16);
+    const b = parseInt(h.substr(4, 2), 16);
+    return `${r},${g},${b}`;
 }
 
 // ---------- Levels ----------
@@ -2040,10 +2094,12 @@ function showMenuOverlay() {
     const maxLevel = parseInt(localStorage.getItem('mtcd_max_level') || '0', 10);
     const hasStats = G.bestScore > 0 || totalCaught > 0 || maxLevel > 0;
     const tip = choice(MENU_TIPS);
+    const rank = rangerRankFor(totalCaught);
 
     overlayCard.innerHTML = `
         <h1>Make the Cat Dizzy!</h1>
         <p class="subtitle">Pokémon Ranger style — but with a cat and a laser pointer</p>
+        ${hasStats ? `<div class="rank" style="--rank:${rank.color}">${rank.badge} ${rank.name}</div>` : ''}
         <ol class="howto">
             <li><strong>Hold</strong> the mouse / finger and <strong>draw closed loops</strong> around the cat.</li>
             <li>Each loop fills a capture pip. Fill them all to catch the cat.</li>
@@ -2578,6 +2634,7 @@ function frame(now) {
             if (G.transitionT <= 0) { G.transitionT = 0; G.transitionDir = 0; }
             else if (G.transitionT >= 1) { G.transitionT = 1; G.transitionDir = 0; }
         }
+        if (G.promotionT > 0) G.promotionT = Math.max(0, G.promotionT - eff);
         G.time += eff;
     }
 
@@ -2626,10 +2683,45 @@ function frame(now) {
 
     drawLevelIntro();
     drawIdleHint();
+    drawPromotionBanner();
 
     updateHud();
 
     requestAnimationFrame(frame);
+}
+
+function drawPromotionBanner() {
+    if (G.promotionT <= 0 || !G.promotionRank) return;
+    const r = G.promotionRank;
+    const tt = G.promotionT;
+    let alpha = 1;
+    if (tt > 2.5) alpha = (3.0 - tt) / 0.5;
+    else if (tt < 0.6) alpha = tt / 0.6;
+    alpha = clamp(alpha, 0, 1);
+    const bobY = Math.sin(performance.now() * 0.005) * 4;
+
+    const ts = clamp(W / 800, 0.6, 1);
+    const cy = H * 0.35 + bobY;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+
+    ctx.font = `bold ${20 * ts}px system-ui, sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.fillText('PROMOTED', W / 2, cy - 38 * ts);
+
+    ctx.font = `bold ${42 * ts}px system-ui, sans-serif`;
+    ctx.fillStyle = r.color;
+    ctx.fillText(`${r.badge}  ${r.name.toUpperCase()}  ${r.badge}`, W / 2, cy + 12 * ts);
+
+    ctx.font = `${14 * ts}px system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(`Total cats caught: ${getTotalCaught()}`, W / 2, cy + 38 * ts);
+
+    ctx.restore();
 }
 
 function drawIdleHint() {
