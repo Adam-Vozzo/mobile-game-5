@@ -1,0 +1,215 @@
+:root {
+    --bg-1: #1a0f2e;
+    --bg-2: #2a1a4a;
+    --accent: #ff3b6e;
+    --laser: #ff2244;
+    --text: #f4e9ff;
+    --text-dim: #b9a9d6;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at top, var(--bg-2), var(--bg-1));
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    touch-action: none;
+}
+
+#game-container {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+}
+
+#hud {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    z-index: 5;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+#meter-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 500px;
+}
+
+#meter-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 70px;
+}
+
+#meter-bar {
+    flex: 1;
+    height: 16px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+}
+
+#meter-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ffd84d, #ff6e3b, #ff3b6e);
+    border-radius: 8px;
+    transition: width 0.15s ease-out;
+    box-shadow: 0 0 12px rgba(255, 110, 59, 0.6);
+}
+
+#stats {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+#stats span {
+    background: rgba(0,0,0,0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+    backdrop-filter: blur(4px);
+}
+
+#game {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: none;
+    display: block;
+    touch-action: none;
+}
+
+#overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 5, 25, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+#overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#overlay-card {
+    max-width: 460px;
+    width: calc(100% - 40px);
+    background: linear-gradient(160deg, rgba(60, 30, 100, 0.9), rgba(30, 15, 60, 0.9));
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    padding: 28px 28px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    text-align: center;
+}
+
+#overlay-card h1 {
+    font-size: 28px;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #ffd84d, #ff3b6e);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+#overlay-card .subtitle {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+#overlay-card .howto {
+    text-align: left;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: 0 0 22px 18px;
+    padding: 0;
+}
+
+#overlay-card .howto li {
+    margin-bottom: 6px;
+}
+
+#overlay-card .howto strong {
+    color: var(--accent);
+}
+
+#overlay-card .result {
+    font-size: 18px;
+    margin: 14px 0 18px;
+    color: var(--text);
+}
+
+#overlay-card .result .big {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    margin: 4px 0;
+}
+
+#start-btn {
+    background: linear-gradient(90deg, #ff6e3b, #ff3b6e);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 32px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(255, 59, 110, 0.4);
+    transition: transform 0.1s, box-shadow 0.2s;
+}
+
+#start-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(255, 59, 110, 0.55);
+}
+
+#start-btn:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+    #title { font-size: 15px; }
+    #meter-label { min-width: 60px; font-size: 12px; }
+    #stats { font-size: 12px; gap: 8px; }
+    #overlay-card h1 { font-size: 22px; }
+}

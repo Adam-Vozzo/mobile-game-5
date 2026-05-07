@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Make the Cat Dizzy!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="hud">
+            <div id="title">Make the Cat Dizzy!</div>
+            <div id="meter-wrapper">
+                <div id="meter-label">Dizziness</div>
+                <div id="meter-bar"><div id="meter-fill"></div></div>
+            </div>
+            <div id="stats">
+                <span id="loop-count">Loops: 0</span>
+                <span id="level">Level: 1</span>
+                <span id="time">Time: 0.0s</span>
+            </div>
+        </div>
+        <canvas id="game"></canvas>
+        <div id="overlay" class="show">
+            <div id="overlay-card">
+                <h1>Make the Cat Dizzy!</h1>
+                <p class="subtitle">Pokémon Ranger style — but with a cat and a laser pointer</p>
+                <ol class="howto">
+                    <li>Move your laser pointer (mouse or finger) to attract the cat.</li>
+                    <li>Draw <strong>closed loops</strong> around the cat — like circling it with a lasso.</li>
+                    <li>Each loop adds dizziness. Fill the bar before it drains!</li>
+                    <li>Bigger loops = bigger dizziness boost. Faster cats in higher levels.</li>
+                </ol>
+                <button id="start-btn">Start Game</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
