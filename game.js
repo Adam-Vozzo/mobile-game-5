@@ -315,6 +315,337 @@ function pickConfettiColor() {
     return choice(['#ffd84d', '#ff6e3b', '#ff3b6e', '#9b6cff', '#6cd2ff', '#4dffb6', '#ffeb3b']);
 }
 
+// ---------- Hooks / extension API ----------
+// Other scripts (loaded via index.html) can subscribe to these hooks to add
+// content without editing game.js directly. Exposed on window.MTCD.
+const HOOKS = {
+    onLevelStart: [],
+    onCapture: [],
+    onLoopComplete: [],
+    onLineBreak: [],
+    onUpdate: [],
+    onDraw: [],
+    onDrawHUD: [],
+    onAttack: [],
+};
+function fireHook(name, ...args) {
+    const arr = HOOKS[name];
+    if (!arr) return;
+    for (const fn of arr) {
+        try { fn(...args); } catch (e) { console.error('hook', name, e); }
+    }
+}
+window.MTCD = {
+    G, FX, HOOKS, fireHook,
+    audio: () => Audio,
+    canvasSize: () => ({ W, H }),
+    rand, randInt, choice, clamp, lerp, dist, TAU,
+};
+
+// ---------- Scenes ----------
+function roundedRectFill(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.arcTo(x + w, y, x + w, y + r, r);
+    c.lineTo(x + w, y + h - r);
+    c.arcTo(x + w, y + h, x + w - r, y + h, r);
+    c.lineTo(x + r, y + h);
+    c.arcTo(x, y + h, x, y + h - r, r);
+    c.lineTo(x, y + r);
+    c.arcTo(x, y, x + r, y, r);
+    c.closePath();
+    c.fill();
+}
+
+const SCENES = {
+    livingRoom: {
+        name: 'Living Room', accent: '#ff6e3b',
+        draw(c, time) {
+            const sofaY = H * 0.85;
+            c.fillStyle = 'rgba(80, 50, 90, 0.5)';
+            roundedRectFill(c, W * 0.08, sofaY - 100, W * 0.84, 200, 24);
+            c.fillStyle = 'rgba(60, 35, 70, 0.55)';
+            roundedRectFill(c, W * 0.06, sofaY - 60, W * 0.18, 120, 14);
+            roundedRectFill(c, W * 0.76, sofaY - 60, W * 0.18, 120, 14);
+            const lx = W * 0.14, ly = 90;
+            const grd = c.createRadialGradient(lx, ly, 0, lx, ly, H * 0.6);
+            grd.addColorStop(0, 'rgba(255, 220, 150, 0.16)');
+            grd.addColorStop(1, 'rgba(255, 220, 150, 0)');
+            c.fillStyle = grd;
+            c.fillRect(0, 0, W, H);
+        },
+    },
+    garden: {
+        name: 'Garden', accent: '#4dffb6',
+        draw(c, time) {
+            const baseY = H - 30;
+            c.fillStyle = 'rgba(90, 180, 120, 0.35)';
+            for (let i = 0; i < W; i += 6) {
+                const h = 14 + Math.sin(i * 0.3 + time * 1.5) * 4 + ((i * 7919) % 6);
+                c.fillRect(i, baseY - h, 3, h);
+            }
+            for (let i = 0; i < 4; i++) {
+                const bx = (W * (i + 1) / 5) + Math.sin(time * 0.6 + i) * 30;
+                const by = H * 0.35 + Math.sin(time * 1.4 + i * 2) * 20;
+                drawButterfly(c, bx, by, time + i);
+            }
+        },
+    },
+    kitchen: {
+        name: 'Kitchen', accent: '#7cd6ff',
+        draw(c, time) {
+            const tileSize = 44;
+            c.strokeStyle = 'rgba(255,255,255,0.05)';
+            c.lineWidth = 1;
+            const oy = H * 0.65;
+            for (let y = oy; y < H; y += tileSize) {
+                for (let x = 0; x < W; x += tileSize) c.strokeRect(x, y, tileSize, tileSize);
+            }
+            const wx = W * 0.7, wy = H * 0.18, ww = 160, wh = 120;
+            c.fillStyle = 'rgba(120, 180, 255, 0.06)';
+            c.fillRect(wx, wy, ww, wh);
+            c.strokeStyle = 'rgba(120, 180, 255, 0.18)';
+            c.strokeRect(wx, wy, ww, wh);
+            c.beginPath();
+            c.moveTo(wx + ww/2, wy); c.lineTo(wx + ww/2, wy + wh);
+            c.moveTo(wx, wy + wh/2); c.lineTo(wx + ww, wy + wh/2);
+            c.stroke();
+        },
+    },
+    bedroom: {
+        name: 'Bedroom', accent: '#9b6cff',
+        draw(c, time) {
+            c.fillStyle = 'rgba(70, 45, 110, 0.55)';
+            roundedRectFill(c, W * 0.12, H - 200, W * 0.76, 160, 18);
+            c.fillStyle = 'rgba(160, 130, 220, 0.4)';
+            roundedRectFill(c, W * 0.16, H - 184, W * 0.18, 50, 10);
+            roundedRectFill(c, W * 0.66, H - 184, W * 0.18, 50, 10);
+            const mx = W * 0.85, my = H * 0.15;
+            const grd = c.createRadialGradient(mx, my, 10, mx, my, 100);
+            grd.addColorStop(0, 'rgba(255,240,200,0.7)');
+            grd.addColorStop(1, 'rgba(255,240,200,0)');
+            c.fillStyle = grd;
+            c.beginPath();
+            c.arc(mx, my, 50, 0, TAU);
+            c.fill();
+        },
+    },
+    attic: {
+        name: 'Attic', accent: '#f6a83d',
+        draw(c, time) {
+            c.strokeStyle = 'rgba(110, 70, 40, 0.5)';
+            c.lineWidth = 16;
+            for (let i = 0; i < 4; i++) {
+                const x = W * (i + 1) / 5;
+                c.beginPath();
+                c.moveTo(x - 40, 0);
+                c.lineTo(x + 80, H);
+                c.stroke();
+            }
+            c.fillStyle = 'rgba(140, 90, 50, 0.5)';
+            roundedRectFill(c, W * 0.06, H - 130, 110, 100, 6);
+            roundedRectFill(c, W * 0.78, H - 110, 130, 90, 6);
+        },
+    },
+    arena: {
+        name: 'Boss Arena', accent: '#ff3b6e',
+        draw(c, time) {
+            const pulse = 0.5 + 0.5 * Math.sin(time * 2);
+            const r = Math.min(W, H) * 0.45;
+            const grd = c.createRadialGradient(W/2, H*0.6, r * 0.3, W/2, H*0.6, r);
+            grd.addColorStop(0, `rgba(255,60,90,${0.18 + 0.06 * pulse})`);
+            grd.addColorStop(1, 'rgba(255,60,90,0)');
+            c.fillStyle = grd;
+            c.beginPath();
+            c.ellipse(W/2, H*0.6, r, r * 0.4, 0, 0, TAU);
+            c.fill();
+            c.fillStyle = 'rgba(40, 25, 35, 0.7)';
+            for (let i = 0; i < 6; i++) {
+                const a = i / 6 * TAU;
+                const px = W/2 + Math.cos(a) * r * 0.85;
+                const py = H*0.6 + Math.sin(a) * r * 0.36;
+                roundedRectFill(c, px - 14, py - 60, 28, 100, 6);
+            }
+        },
+    },
+};
+
+function drawButterfly(c, x, y, t) {
+    const flap = Math.sin(t * 12) * 0.8;
+    c.save();
+    c.translate(x, y);
+    c.scale(flap, 1);
+    c.fillStyle = 'rgba(255, 200, 230, 0.7)';
+    c.beginPath();
+    c.ellipse(-6, 0, 6, 4, 0, 0, TAU);
+    c.ellipse(6, 0, 6, 4, 0, 0, TAU);
+    c.fill();
+    c.restore();
+}
+
+const SCENE_ORDER = ['livingRoom', 'garden', 'kitchen', 'bedroom', 'attic', 'arena'];
+G.scene = 'livingRoom';
+
+// ---------- Power-ups ----------
+const POWERUP_TYPES = {
+    catnip: {
+        name: 'Catnip', color: '#a4dc4d', icon: 'leaf', radius: 16,
+        pickup(p) {
+            for (const cat of G.cats) {
+                if (cat.captured) continue;
+                if (dist(p.x, p.y, cat.x, cat.y) < 280) {
+                    cat.spinVel += 8 * (Math.random() < 0.5 ? -1 : 1);
+                    cat.mood = 'dizzy';
+                    cat.moodTimer = 4;
+                    cat.captureProgress = Math.min(cat.type.loops - 0.0001, cat.captureProgress + 0.5);
+                }
+            }
+            FX.shockwave(p.x, p.y, 'rgba(164,220,77,0.9)', 320, 0.6);
+            FX.spawnConfetti(p.x, p.y, 24, { color: '#a4dc4d', spread: 200 });
+            FX.floatText(p.x, p.y - 18, 'CATNIP!', '#a4dc4d', 18);
+            if (audioUnlocked) Audio.SFX.purr();
+        },
+    },
+    treat: {
+        name: 'Treat', color: '#ffb84d', icon: 'fish', radius: 14,
+        pickup(p) {
+            for (const cat of G.cats) {
+                if (cat.captured) continue;
+                cat.wanderTarget = { x: p.x, y: p.y };
+                cat.attackCooldown = Math.max(cat.attackCooldown, 3);
+                cat.mood = 'curious';
+            }
+            FX.shockwave(p.x, p.y, 'rgba(255,184,77,0.8)', 240, 0.5);
+            FX.spawnSparkles(p.x, p.y, 12, '#ffb84d');
+            FX.floatText(p.x, p.y - 18, 'YUM!', '#ffb84d', 18);
+            if (audioUnlocked) Audio.SFX.meow();
+        },
+    },
+    heart: {
+        name: 'Bonus', color: '#ff3b6e', icon: 'heart', radius: 12,
+        pickup(p) {
+            G.score += 250;
+            FX.spawnConfetti(p.x, p.y, 14, { color: '#ff3b6e' });
+            FX.floatText(p.x, p.y - 18, '+250', '#ff3b6e', 22);
+            if (audioUnlocked) Audio.SFX.loopClose(2);
+        },
+    },
+    slowmo: {
+        name: 'Slow-Mo', color: '#7cd6ff', icon: 'clock', radius: 14,
+        pickup(p) {
+            FX.slowmo(0.4, 1.6);
+            FX.shockwave(p.x, p.y, 'rgba(124,214,255,0.9)', 280, 0.5);
+            FX.flash('124,214,255', 0.3);
+            FX.floatText(p.x, p.y - 18, 'SLOW-MO', '#7cd6ff', 20);
+        },
+    },
+};
+
+const Powerups = {
+    list: [],
+    spawnTimer: 0,
+    reset() { this.list.length = 0; this.spawnTimer = rand(4, 7); },
+    spawn(typeId, x, y) {
+        const def = POWERUP_TYPES[typeId];
+        if (!def) return;
+        this.list.push({
+            type: def, typeId, x, y,
+            age: 0, life: 9.5,
+            bob: Math.random() * TAU,
+        });
+    },
+    update(dt) {
+        if (G.stage !== 'playing') return;
+        this.spawnTimer -= dt;
+        if (this.spawnTimer <= 0) {
+            this.spawnTimer = rand(5, 9);
+            const t = choice(Object.keys(POWERUP_TYPES));
+            this.spawn(t, rand(W * 0.12, W * 0.88), rand(H * 0.3, H * 0.85));
+        }
+        for (let i = this.list.length - 1; i >= 0; i--) {
+            const p = this.list[i];
+            p.age += dt;
+            p.bob += dt * 3;
+            if (p.age >= p.life) { this.list.splice(i, 1); continue; }
+            if (G.laser.active && dist(G.laser.x, G.laser.y, p.x, p.y) < p.type.radius + 14) {
+                p.type.pickup(p);
+                this.list.splice(i, 1);
+            }
+        }
+    },
+    draw(c) {
+        for (const p of this.list) {
+            const fade = p.age > p.life - 1 ? (p.life - p.age) : 1;
+            const y = p.y + Math.sin(p.bob) * 4;
+            c.save();
+            c.globalAlpha = fade;
+            const grd = c.createRadialGradient(p.x, y, 0, p.x, y, 36);
+            grd.addColorStop(0, p.type.color + 'cc');
+            grd.addColorStop(1, p.type.color + '00');
+            c.fillStyle = grd;
+            c.beginPath();
+            c.arc(p.x, y, 36, 0, TAU);
+            c.fill();
+            c.shadowBlur = 12;
+            c.shadowColor = p.type.color;
+            drawPowerupIcon(c, p.x, y, p.type.icon, p.type.color);
+            c.restore();
+        }
+    },
+};
+
+function drawPowerupIcon(c, x, y, icon, color) {
+    c.save();
+    c.translate(x, y);
+    c.fillStyle = color;
+    c.lineWidth = 1.5;
+    if (icon === 'leaf') {
+        c.beginPath();
+        c.moveTo(0, -10);
+        c.quadraticCurveTo(10, -4, 8, 8);
+        c.quadraticCurveTo(0, 12, -8, 8);
+        c.quadraticCurveTo(-10, -4, 0, -10);
+        c.fill();
+        c.beginPath();
+        c.moveTo(0, -8); c.lineTo(0, 10);
+        c.strokeStyle = 'rgba(0,0,0,0.4)';
+        c.stroke();
+    } else if (icon === 'fish') {
+        c.beginPath();
+        c.ellipse(0, 0, 12, 6, 0, 0, TAU);
+        c.fill();
+        c.beginPath();
+        c.moveTo(11, 0); c.lineTo(18, -6); c.lineTo(18, 6); c.closePath();
+        c.fill();
+        c.fillStyle = '#1a0f2e';
+        c.beginPath();
+        c.arc(-6, -1, 1.2, 0, TAU);
+        c.fill();
+    } else if (icon === 'heart') {
+        c.beginPath();
+        c.moveTo(0, 4);
+        c.bezierCurveTo(-12, -8, -10, -14, 0, -6);
+        c.bezierCurveTo(10, -14, 12, -8, 0, 4);
+        c.fill();
+    } else if (icon === 'clock') {
+        c.beginPath();
+        c.arc(0, 0, 10, 0, TAU);
+        c.fill();
+        c.strokeStyle = '#1a0f2e';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(0, 0); c.lineTo(0, -7);
+        c.moveTo(0, 0); c.lineTo(6, 0);
+        c.stroke();
+    }
+    c.restore();
+}
+
+HOOKS.onLevelStart.push(() => Powerups.reset());
+HOOKS.onUpdate.push((dt) => Powerups.update(dt));
+HOOKS.onDraw.push((c) => Powerups.draw(c));
+
 // ---------- Cat types ----------
 // Each cat type has unique visuals, behavior parameters, and capture difficulty.
 const CAT_TYPES = {
@@ -1052,6 +1383,7 @@ function breakTrail(reason) {
     FX.spawnSparkles(G.laser.x, G.laser.y, 12, '#ff5566');
     FX.floatText(G.laser.x, G.laser.y - 16, 'LINE BROKEN!', '#ff5566', 16);
     if (audioUnlocked) Audio.SFX.lineBreak();
+    fireHook('onLineBreak', reason);
 }
 
 // Loop detection: when current point closes near an earlier point, test
@@ -1125,6 +1457,7 @@ function registerLoop(cat, poly, area) {
     FX.shockwave(cat.x, cat.y, 'rgba(255,200,80,0.8)', cat.size * 2.5, 0.5);
     FX.floatText(cat.x, cat.y - cat.size - 30, `+${points}${G.combo > 1 ? ` ×${G.combo}` : ''}`, '#ffd84d', 18);
     FX.shake(3, 0.18);
+    fireHook('onLoopComplete', cat, area, points);
 
     if (cat.captureProgress >= cat.type.loops) {
         captureCat(cat);
@@ -1138,14 +1471,34 @@ function captureCat(cat) {
     G.capturesLeft -= 1;
     const bonus = 500 + cat.type.loops * 200;
     G.score += bonus;
-    FX.spawnConfetti(cat.x, cat.y, 60, { spread: 360, lifeMin: 1.0, lifeMax: 2.0, gravity: 320 });
+    // Layered capture FX: triple shockwave, gold + scene-accent confetti,
+    // hearts shooting up, expanding ring of stars
+    const accent = (SCENES[G.scene] && SCENES[G.scene].accent) || '#ffec5e';
+    FX.spawnConfetti(cat.x, cat.y, 70, { spread: 360, lifeMin: 1.0, lifeMax: 2.0, gravity: 320 });
+    FX.spawnConfetti(cat.x, cat.y, 30, { color: accent, spread: 220, lifeMin: 0.8, lifeMax: 1.6 });
+    FX.spawnSparkles(cat.x, cat.y, 28, '#ffd84d');
+    // Heart burst
+    for (let i = 0; i < 8; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+        const sp = 200 + Math.random() * 100;
+        G.particles.push({
+            x: cat.x, y: cat.y - cat.size * 0.4,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: 1.4, age: 0, color: '#ff8aa9',
+            size: 5, gravity: 80, shape: 'heart',
+            rot: 0, rotV: rand(-3, 3),
+        });
+    }
     FX.shockwave(cat.x, cat.y, 'rgba(255,110,59,0.9)', cat.size * 5, 0.7);
+    setTimeout(() => FX.shockwave(cat.x, cat.y, 'rgba(255,236,180,0.7)', cat.size * 3, 0.5), 80);
+    setTimeout(() => FX.shockwave(cat.x, cat.y, accent + 'cc', cat.size * 2.2, 0.4), 160);
     FX.flash('255,236,180', 0.55);
     FX.shake(14, 0.4);
-    FX.hitstop(0.12);
-    FX.slowmo(0.35, 0.5);
-    FX.floatText(cat.x, cat.y - cat.size - 40, `CAUGHT! +${bonus}`, '#ffec5e', 26);
+    FX.hitstop(0.14);
+    FX.slowmo(0.35, 0.55);
+    FX.floatText(cat.x, cat.y - cat.size - 40, `${cat.type.name.toUpperCase()} CAUGHT! +${bonus}`, '#ffec5e', 22);
     if (audioUnlocked) { Audio.SFX.capture(); Audio.SFX.purr(); }
+    fireHook('onCapture', cat, bonus);
 
     if (G.capturesLeft <= 0) {
         setTimeout(levelComplete, 900);
@@ -1193,9 +1546,17 @@ function startLevel(n) {
         const y = cy + Math.sin(angle) * r;
         G.cats.push(createCat(typeId, x, y));
     });
+    // Pick a scene for this level: bosses go to arena, others rotate
+    const spec2 = levelSpec(n);
+    if (spec2.some(t => CAT_TYPES[t] && CAT_TYPES[t].isBoss)) {
+        G.scene = 'arena';
+    } else {
+        G.scene = SCENE_ORDER[(n - 1) % (SCENE_ORDER.length - 1)];
+    }
     G.stage = 'playing';
     hideOverlay();
     if (audioUnlocked) Audio.SFX.click();
+    fireHook('onLevelStart', n);
 }
 
 function levelComplete() {
@@ -1287,10 +1648,11 @@ function updateHud() {
 // ---------- Background ----------
 function drawBackground(time) {
     ctx.save();
+    // Stars (always twinkling)
     for (const s of G.bg.stars) {
         const x = (s.x + time * 6) % (W + 40) - 20;
         const y = (s.y + time * 3) % (H + 40) - 20;
-        const a = s.a * (0.6 + 0.4 * Math.sin(s.tw + time * 1.5));
+        const a = s.a * (0.6 + 0.4 * Math.sin(s.tw + time * 1.5)) * 0.5;
         ctx.globalAlpha = a;
         ctx.fillStyle = '#fff';
         ctx.beginPath();
@@ -1298,6 +1660,9 @@ function drawBackground(time) {
         ctx.fill();
     }
     ctx.globalAlpha = 1;
+    // Per-level scene
+    const scene = SCENES[G.scene];
+    if (scene) scene.draw(ctx, time);
     // Floor glow under cats
     for (const cat of G.cats) {
         if (cat.captured) continue;
@@ -1421,6 +1786,15 @@ function drawParticles() {
             ctx.rotate(p.rot);
             ctx.fillRect(-p.size, -p.size * 0.3, p.size * 2, p.size * 0.6);
             ctx.fillRect(-p.size * 0.3, -p.size, p.size * 0.6, p.size * 2);
+        } else if (p.shape === 'heart') {
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            const s = p.size;
+            ctx.beginPath();
+            ctx.moveTo(0, s * 0.5);
+            ctx.bezierCurveTo(-s * 1.4, -s, -s * 1.2, -s * 1.7, 0, -s * 0.7);
+            ctx.bezierCurveTo(s * 1.2, -s * 1.7, s * 1.4, -s, 0, s * 0.5);
+            ctx.fill();
         } else {
             ctx.translate(p.x, p.y);
             ctx.rotate(p.rot);
@@ -1550,6 +1924,7 @@ function frame(now) {
         for (const cat of G.cats) updateCat(cat, eff);
         updateParticles(eff);
         updateDust(eff);
+        fireHook('onUpdate', eff);
         // Shake
         if (G.shakeT > 0) {
             G.shakeT -= eff;
@@ -1574,11 +1949,14 @@ function frame(now) {
     drawBackground(G.time);
     drawDust();
     drawTrail();
+    // World-space additions (powerups, etc.)
+    fireHook('onDraw', ctx);
     // Cats
     for (const cat of G.cats) drawCat(cat);
     drawParticles();
     drawLaser();
     ctx.restore();
+    fireHook('onDrawHUD', ctx);
 
     // Flash overlay
     if (G.flash > 0) {
