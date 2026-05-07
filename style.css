@@ -296,6 +296,19 @@ html, body {
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+#overlay-card .streak {
+    display: inline-block;
+    margin: 6px 0 8px;
+    padding: 5px 12px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #ff6e3b, #ff3b6e);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 14px rgba(255, 110, 59, 0.35);
+}
+
 #overlay-card .chip.boss {
     background: linear-gradient(90deg, #ff3b6e, #ff6e3b);
     color: #fff;

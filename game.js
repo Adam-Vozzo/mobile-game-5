@@ -62,6 +62,10 @@ const G = {
     levelCaptures: [],      // list of captured cat type defs for level-complete breakdown
     hyperdrive: false,      // true while combo >= 10
     hyperdriveT: 0,         // smooth interp 0..1 for hyperdrive intensity
+    streak: parseInt(localStorage.getItem('mtcd_streak') || '0', 10), // flawless run streak
+    levelHadBreak: false,   // tracks whether the player broke their line this level
+    transitionT: 0,         // 0..1 fade alpha for scene transitions (0 = invisible)
+    transitionDir: 0,       // 1 fading to black, -1 fading back, 0 idle
 };
 window.G = G; // expose for tinkering
 
@@ -1677,6 +1681,7 @@ function breakTrail(reason) {
     }
     FX.floatText(G.laser.x, G.laser.y - 16, 'LINE BROKEN!', '#ff5566', 16);
     if (audioUnlocked) Audio.SFX.lineBreak();
+    G.levelHadBreak = true;
     fireHook('onLineBreak', reason);
 }
 
@@ -1936,6 +1941,10 @@ function startLevel(n) {
     G.idleT = 0;
     G.levelCaptures = [];
     G.laser.energy = 1;
+    G.levelHadBreak = false;
+    // Brief scene transition fade (in -> level)
+    G.transitionT = 1;
+    G.transitionDir = -1;
     if (bossWave) {
         FX.shake(8, 0.5);
         FX.flash('255,60,90', 0.3);
@@ -1955,6 +1964,13 @@ function levelComplete() {
     // Persist max level reached (for menu stats)
     const prevMax = parseInt(localStorage.getItem('mtcd_max_level') || '0', 10);
     if (G.level > prevMax) localStorage.setItem('mtcd_max_level', G.level.toString());
+    // Streak: flawless level (no line breaks) extends the streak; any break resets it
+    if (!G.levelHadBreak) {
+        G.streak += 1;
+    } else {
+        G.streak = 0;
+    }
+    localStorage.setItem('mtcd_streak', G.streak.toString());
     if (audioUnlocked) Audio.SFX.levelComplete();
     showLevelCompleteOverlay();
 }
@@ -2036,6 +2052,7 @@ function showLevelCompleteOverlay() {
         }).join('') + '</div>'
         : '';
     const sceneName = (SCENES[G.scene] && SCENES[G.scene].name) || '';
+    const streakLabel = G.streak >= 2 ? `<div class="streak">🔥 Flawless streak ×${G.streak}</div>` : '';
     overlayCard.innerHTML = `
         <h1>${isBossLevel ? 'Boss caught!' : 'Level cleared!'}</h1>
         <p class="subtitle">${sceneName}</p>
@@ -2044,6 +2061,7 @@ function showLevelCompleteOverlay() {
             <span class="big">${G.score}</span>
             ${G.bestScore === G.score && G.score > 0 ? '<span class="best-tag">NEW BEST</span>' : ''}
         </p>
+        ${streakLabel}
         ${rosterHtml}
         <div class="stat-row">
             <div><span class="lbl">Level</span><span class="val">${G.level}</span></div>
@@ -2505,6 +2523,12 @@ function frame(now) {
             if (audioUnlocked) Audio.SFX.capture();
         }
         G.hyperdriveT += (hyperTarget - G.hyperdriveT) * Math.min(1, eff * 3);
+        // Transition fade
+        if (G.transitionDir !== 0) {
+            G.transitionT += G.transitionDir * eff * 2.4;
+            if (G.transitionT <= 0) { G.transitionT = 0; G.transitionDir = 0; }
+            else if (G.transitionT >= 1) { G.transitionT = 1; G.transitionDir = 0; }
+        }
         G.time += eff;
     }
 
@@ -2542,6 +2566,12 @@ function frame(now) {
     // Flash overlay
     if (G.flash > 0) {
         ctx.fillStyle = `rgba(${G.flashColor},${G.flash})`;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Scene transition fade
+    if (G.transitionT > 0) {
+        ctx.fillStyle = `rgba(10,5,25,${G.transitionT})`;
         ctx.fillRect(0, 0, W, H);
     }
 
