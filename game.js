@@ -60,6 +60,8 @@ const G = {
     levelIntroT: 0,         // countdown for the "Level N: Scene" intro splash
     idleT: 0,               // seconds since the player last drew anything in a level
     levelCaptures: [],      // list of captured cat type defs for level-complete breakdown
+    hyperdrive: false,      // true while combo >= 10
+    hyperdriveT: 0,         // smooth interp 0..1 for hyperdrive intensity
 };
 window.G = G; // expose for tinkering
 
@@ -164,22 +166,27 @@ const Audio = (() => {
             const seq = [523, 659, 784, 1046, 1318];
             seq.forEach((f, i) => setTimeout(() => tone(f, 0.18, 'triangle', 0.28), i * 90));
         },
-        meow() {
+        meow(opts = {}) {
             ensure();
             const t0 = actx.currentTime;
             const osc = actx.createOscillator();
             const gain = actx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(420, t0);
-            osc.frequency.linearRampToValueAtTime(720, t0 + 0.08);
-            osc.frequency.linearRampToValueAtTime(380, t0 + 0.32);
+            // Per-cat-type variation: pitch, oscillator type, filter cutoff
+            const base = opts.base != null ? opts.base : 420;
+            const peak = opts.peak != null ? opts.peak : 720;
+            const tail = opts.tail != null ? opts.tail : 380;
+            const dur = opts.dur != null ? opts.dur : 0.32;
+            osc.type = opts.type || 'sawtooth';
+            osc.frequency.setValueAtTime(base, t0);
+            osc.frequency.linearRampToValueAtTime(peak, t0 + 0.08);
+            osc.frequency.linearRampToValueAtTime(tail, t0 + dur);
             const filter = actx.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.value = 1500;
-            envelope(gain, t0, 0.02, 0.1, 0.5, 0.25, 0.18);
+            filter.frequency.value = opts.filter || 1500;
+            envelope(gain, t0, 0.02, 0.1, 0.5, 0.25, opts.volume || 0.18);
             osc.connect(filter).connect(gain).connect(masterGain);
             osc.start(t0);
-            osc.stop(t0 + 0.5);
+            osc.stop(t0 + dur + 0.2);
         },
         purr() { noise(0.3, 0.04, 90); },
         hiss() { noise(0.4, 0.18, 4000); },
@@ -822,6 +829,35 @@ const CAT_TYPES = {
     },
 };
 
+// Per-type meow tone derivation — bigger cats meow lower, kittens higher, etc.
+function meowOptsFor(t) {
+    let base = 420, peak = 720, tail = 380, type = 'sawtooth', filter = 1500, dur = 0.32, volume = 0.18;
+    // Size-based pitch
+    const s = t.size || 1;
+    base /= Math.pow(s, 0.6);
+    peak /= Math.pow(s, 0.6);
+    tail /= Math.pow(s, 0.6);
+    if (t.id === 'kitten') {
+        base = 700; peak = 1180; tail = 720;
+        type = 'sine'; filter = 2200; dur = 0.22; volume = 0.14;
+    } else if (t.isBoss) {
+        // Lower, longer, gravellier
+        base *= 0.8; peak *= 0.78; tail *= 0.8;
+        type = 'sawtooth'; filter = 900; dur = 0.5; volume = 0.22;
+    } else if (t.fluffy) {
+        type = 'triangle'; filter = 1300;
+    } else if (t.wrinkled) {
+        type = 'sawtooth'; filter = 1100;
+    } else if (t.id === 'siamese' || t.id === 'ragdoll') {
+        type = 'triangle'; filter = 1700; dur = 0.42;
+    } else if (t.id === 'white') {
+        type = 'sine'; filter = 1900;
+    } else if (t.id === 'bengal') {
+        base *= 1.1; peak *= 1.1; type = 'sawtooth';
+    }
+    return { base, peak, tail, type, filter, dur, volume };
+}
+
 // ---------- Cat entity ----------
 function createCat(typeId, x, y) {
     const t = CAT_TYPES[typeId] || CAT_TYPES.ginger;
@@ -875,10 +911,10 @@ function updateCat(cat, dt) {
     cat.meowCooldown -= dt;
     cat.captureFlash = Math.max(0, cat.captureFlash - dt * 2);
 
-    // Random meow
+    // Random meow — pitch and timbre vary per cat
     if (cat.meowCooldown <= 0) {
         cat.meowCooldown = rand(4, 10);
-        if (Math.random() < 0.4 && audioUnlocked) Audio.SFX.meow();
+        if (Math.random() < 0.4 && audioUnlocked) Audio.SFX.meow(meowOptsFor(cat.type));
     }
 
     // Spin physics
@@ -2456,6 +2492,19 @@ function frame(now) {
         // Flow smoothing
         const target = clamp(G.combo / 8, 0, 1);
         G.flow += (target - G.flow) * Math.min(1, eff * 4);
+        // Hyperdrive (combo >= 10)
+        const hyperTarget = G.combo >= 10 ? 1 : 0;
+        const wasHyper = G.hyperdrive;
+        G.hyperdrive = G.combo >= 10;
+        if (G.hyperdrive && !wasHyper) {
+            // Entering hyperdrive
+            FX.flash('255,200,80', 0.4);
+            FX.shake(10, 0.4);
+            FX.floatText(W / 2, H * 0.4, 'HYPERDRIVE!', '#ffd84d', 44);
+            FX.spawnConfetti(W / 2, H * 0.5, 60, { color: '#ffd84d', spread: 360, lifeMin: 0.8, lifeMax: 1.4 });
+            if (audioUnlocked) Audio.SFX.capture();
+        }
+        G.hyperdriveT += (hyperTarget - G.hyperdriveT) * Math.min(1, eff * 3);
         G.time += eff;
     }
 
@@ -2474,6 +2523,21 @@ function frame(now) {
     drawLaser();
     ctx.restore();
     fireHook('onDrawHUD', ctx);
+
+    // Hyperdrive vignette + edge pulse
+    if (G.hyperdriveT > 0.01) {
+        const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.014);
+        const vRadius = Math.max(W, H);
+        const grd = ctx.createRadialGradient(W / 2, H / 2, vRadius * 0.4, W / 2, H / 2, vRadius * 0.85);
+        grd.addColorStop(0, 'rgba(255,180,40,0)');
+        grd.addColorStop(1, `rgba(255,160,40,${0.35 * G.hyperdriveT * pulse})`);
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+        // Top/bottom hot bars
+        ctx.fillStyle = `rgba(255, 200, 80, ${0.3 * G.hyperdriveT * pulse})`;
+        ctx.fillRect(0, 0, W, 4);
+        ctx.fillRect(0, H - 4, W, 4);
+    }
 
     // Flash overlay
     if (G.flash > 0) {
